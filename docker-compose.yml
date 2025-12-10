@@ -22,11 +22,6 @@ services:
       context: .
       dockerfile: Dockerfile
     command: /django.sh
-    depends_on:
-      postgres_db:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
     networks:
       - kakebe_network
     ports:
@@ -69,10 +64,6 @@ services:
       - static_files:/app/staticfiles
       - media_files:/app/media
       - ./logs:/app/logs
-    depends_on:
-      - postgres_db
-      - redis
-      - kakebe_shop_app
     networks:
       - kakebe_network
     deploy:
@@ -93,9 +84,6 @@ services:
     command: celery -A kakebe_project flower --basic_auth=admin:password123
     ports:
       - "5555:5555"
-    depends_on:
-      redis:
-        condition: service_healthy
     networks:
       - kakebe_network
     deploy:
@@ -121,8 +109,6 @@ services:
     networks:
       - kakebe_network
     depends_on:
-      redis:
-        condition: service_healthy
       kakebe_shop_app:
         condition: service_healthy
     deploy:
