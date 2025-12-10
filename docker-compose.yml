@@ -139,7 +139,7 @@ services:
       - kakebe_network
 
   flower:
-    image: kakebe_shop_image
+    image: kakebe_backend_image
     container_name: kakebe_flower_container
     restart: unless-stopped
     command: celery -A kakebe_project flower --basic_auth=admin:password123
@@ -152,7 +152,7 @@ services:
       - kakebe_network
 
   beat:
-    image: kakebe_shop_image
+    image: kakebe_backend_image
     container_name: kakebe_beat_container
     restart: unless-stopped
     command: celery -A kakebe_project beat -l INFO --scheduler django_celery_beat.schedulers:DatabaseScheduler
