@@ -13,6 +13,8 @@ volumes:
     driver: local
   media_files:
     driver: local
+  redis_data:
+    driver: local
 
 services:
   kakebe_shop_app:
