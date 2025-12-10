@@ -58,7 +58,7 @@ services:
   celery:
     image: kakebe_backend_image
     container_name: kakebe_celery_container
-    command: celery -A kakebe_project worker -E -l info
+    command: celery -A KakebeShop worker -E -l info
     restart: unless-stopped
     volumes:
       - static_files:/app/staticfiles
@@ -81,7 +81,7 @@ services:
     image: kakebe_backend_image
     container_name: kakebe_flower_container
     restart: unless-stopped
-    command: celery -A kakebe_project flower --basic_auth=admin:password123
+    command: celery -A KakebeShop flower --basic_auth=admin:password123
     ports:
       - "5555:5555"
     networks:
@@ -101,7 +101,7 @@ services:
     image: kakebe_backend_image
     container_name: kakebe_beat_container
     restart: unless-stopped
-    command: celery -A kakebe_project beat -l INFO --scheduler django_celery_beat.schedulers:DatabaseScheduler
+    command: celery -A KakebeShop beat -l INFO --scheduler django_celery_beat.schedulers:DatabaseScheduler
     volumes:
       - static_files:/app/staticfiles
       - media_files:/app/media
