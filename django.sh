@@ -12,7 +12,7 @@ python manage.py migrate --noinput || {
 }
 
 echo "🚀 Starting Gunicorn server"
-exec gunicorn kikuboposmachine.wsgi:application \
+exec gunicorn KakebeShop.wsgi:application \
   --bind 0.0.0.0:7200 \
   --workers 3 \
   --access-logfile - \
