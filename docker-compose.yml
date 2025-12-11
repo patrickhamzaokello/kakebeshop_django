@@ -13,8 +13,6 @@ volumes:
     driver: local
   media_files:
     driver: local
-  redis_data:
-    driver: local
 
 services:
   kakebe_shop_app:
@@ -56,35 +54,6 @@ services:
       options:
         max-size: "10m"
         max-file: "3"
-
-  redis:
-      image: redis:alpine
-      container_name: tnd_redis_container
-      command: ["redis-server", "--requirepass", "${REDIS_PASSWORD}", "--appendonly", "yes"]
-      restart: unless-stopped
-      ports:
-        - "127.0.0.1:6379:6379"  # ← CHANGED: Also secure Redis
-      networks:
-        - kakebe_network
-      volumes:
-        - redis_data:/data
-      environment:
-        - REDIS_PASSWORD=${REDIS_PASSWORD}
-      healthcheck:
-        test: ["CMD", "redis-cli", "ping"]
-        interval: 10s
-        timeout: 5s
-        retries: 5
-      deploy:
-        resources:
-          limits:
-            memory: 256M
-            cpus: '0.25'
-      logging:
-        driver: "json-file"
-        options:
-          max-size: "10m"
-          max-file: "3"
 
   celery:
     image: kakebe_backend_image

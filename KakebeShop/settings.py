@@ -127,8 +127,8 @@ DATABASES = {
         'PORT': config('PG_PORT', default='5432'),
     }
 }
-CELERY_BROKER_URL = f"redis://:{config('REDIS_PASSWORD')}@redis:6379/0"
-CELERY_RESULT_BACKEND = f"redis://:{config('REDIS_PASSWORD')}@redis:6379/2"
+CELERY_BROKER_URL = config('REDIS_DATABASE_SERVER_HOST')
+CELERY_RESULT_BACKEND = config('REDIS_DATABASE_SERVER_HOST')
 # Celery task settings
 CELERY_TASK_SERIALIZER = 'json'
 CELERY_RESULT_SERIALIZER = 'json'
@@ -138,6 +138,11 @@ CELERY_TASK_STARTED = True
 CELERY_SOFT_TIME_LIMIT = 6900,  # Soft limit at 1h 55m
 CELERY_TIMEZONE = 'UTC'
 CELERY_ENABLE_UTC = True
+
+CELERY_TASK_DEFAULT_QUEUE = 'kakebeshop_tasks'
+CELERY_RESULT_BACKEND_TRANSPORT_OPTIONS = {
+    'result_chord_prefix': 'kakebeshop-chord-',
+}
 
 # Celery Beat settings
 CELERY_BEAT_SCHEDULER = 'django_celery_beat.schedulers:DatabaseScheduler'
@@ -257,7 +262,8 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 CACHES = {
     'default': {
         'BACKEND': 'django.core.cache.backends.redis.RedisCache',
-        'LOCATION': f"redis://:{config('REDIS_PASSWORD')}@redis:6379/1",
+        'LOCATION': config('REDIS_DATABASE_SERVER_HOST'),
+        'KEY_PREFIX': 'kakebeshop',
     }
 }
 
