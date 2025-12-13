@@ -155,7 +155,7 @@ class CartAdmin(admin.ModelAdmin):
     total_quantity.short_description = "Total Items"
 
     def user_link(self, obj):
-        url = reverse('admin:auth_user_change', args=[obj.user.id])
+        url = reverse('admin:authentication_user_change', args=[obj.user.id])
         return format_html('<a href="{}">{}</a>', url, obj.user)
 
     user_link.short_description = "User"

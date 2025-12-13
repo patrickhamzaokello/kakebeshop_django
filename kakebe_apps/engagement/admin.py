@@ -28,7 +28,7 @@ class MessageInline(admin.TabularInline):
         return False
 
     def sender_link(self, obj):
-        url = reverse('admin:auth_user_change', args=[obj.sender.id])
+        url = reverse('admin:authentication_user_change', args=[obj.sender.id])
         return format_html('<a href="{}">{}</a>', url, obj.sender.name)
 
     sender_link.short_description = "Sender"
@@ -52,7 +52,7 @@ class FollowUpLogInline(admin.TabularInline):
         return False
 
     def user_link(self, obj):
-        url = reverse('admin:auth_user_change', args=[obj.user.id])
+        url = reverse('admin:authentication_user_change', args=[obj.user.id])
         return format_html('<a href="{}">{}</a>', url, obj.user.name)
 
     user_link.short_description = "User"
@@ -73,7 +73,7 @@ class FavoriteAdmin(admin.ModelAdmin):
     readonly_fields = ('id', 'created_at', 'user_link', 'listing_link')
 
     def user_link(self, obj):
-        url = reverse('admin:auth_user_change', args=[obj.user.id])
+        url = reverse('admin:authentication_user_change', args=[obj.user.id])
         return format_html('<a href="{}">{}</a>', url, obj.user.name)
 
     user_link.short_description = "User"
@@ -112,7 +112,7 @@ class SavedSearchAdmin(admin.ModelAdmin):
     )
 
     def user_link(self, obj):
-        url = reverse('admin:auth_user_change', args=[obj.user.id])
+        url = reverse('admin:authentication_user_change', args=[obj.user.id])
         return format_html('<a href="{}">{}</a>', url, obj.user.name)
 
     user_link.short_description = "User"
@@ -162,13 +162,13 @@ class ConversationAdmin(admin.ModelAdmin):
     inlines = [MessageInline]
 
     def buyer_link(self, obj):
-        url = reverse('admin:auth_user_change', args=[obj.buyer.id])
+        url = reverse('admin:authentication_user_change', args=[obj.buyer.id])
         return format_html('<a href="{}">{}</a>', url, obj.buyer.name)
 
     buyer_link.short_description = "Buyer"
 
     def seller_link(self, obj):
-        url = reverse('admin:auth_user_change', args=[obj.seller.id])
+        url = reverse('admin:authentication_user_change', args=[obj.seller.id])
         return format_html('<a href="{}">{}</a>', url, obj.seller.name)
 
     seller_link.short_description = "Seller"
@@ -254,7 +254,7 @@ class MessageAdmin(admin.ModelAdmin):
     )
 
     def sender_link(self, obj):
-        url = reverse('admin:auth_user_change', args=[obj.sender.id])
+        url = reverse('admin:authentication_user_change', args=[obj.sender.id])
         return format_html('<a href="{}">{}</a>', url, obj.sender.name)
 
     sender_link.short_description = "Sender"
@@ -308,7 +308,7 @@ class NotificationAdmin(admin.ModelAdmin):
     )
 
     def user_link(self, obj):
-        url = reverse('admin:auth_user_change', args=[obj.user.id])
+        url = reverse('admin:authentication_user_change', args=[obj.user.id])
         return format_html('<a href="{}">{}</a>', url, obj.user.name)
 
     user_link.short_description = "User"
@@ -384,7 +384,7 @@ class ListingReviewAdmin(admin.ModelAdmin):
     listing_link.short_description = "Listing"
 
     def user_link(self, obj):
-        url = reverse('admin:auth_user_change', args=[obj.user.id])
+        url = reverse('admin:authentication_user_change', args=[obj.user.id])
         return format_html('<a href="{}">{}</a>', url, obj.user.name)
 
     user_link.short_description = "User"
@@ -442,7 +442,7 @@ class MerchantReviewAdmin(admin.ModelAdmin):
     merchant_link.admin_order_field = 'merchant__display_name'
 
     def user_link(self, obj):
-        url = reverse('admin:auth_user_change', args=[obj.user.id])
+        url = reverse('admin:authentication_user_change', args=[obj.user.id])
         return format_html('<a href="{}">{}</a>', url, obj.user.name)
 
     user_link.short_description = "User"
@@ -564,7 +564,7 @@ class ReportAdmin(admin.ModelAdmin):
     )
 
     def reporter_link(self, obj):
-        url = reverse('admin:auth_user_change', args=[obj.reporter.id])
+        url = reverse('admin:authentication_user_change', args=[obj.reporter.id])
         return format_html('<a href="{}">{}</a>', url, obj.reporter.name)
 
     reporter_link.short_description = "Reporter"
@@ -598,7 +598,7 @@ class ReportAdmin(admin.ModelAdmin):
 
     def reported_user_link(self, obj):
         if obj.reported_user:
-            url = reverse('admin:auth_user_change', args=[obj.reported_user.id])
+            url = reverse('admin:authentication_user_change', args=[obj.reported_user.id])
             return format_html('<a href="{}">{}</a>', url, obj.reported_user.name)
         return "—"
 
@@ -690,7 +690,7 @@ class FollowUpLogAdmin(admin.ModelAdmin):
     inlines = []
 
     def user_link(self, obj):
-        url = reverse('admin:auth_user_change', args=[obj.user.id])
+        url = reverse('admin:authentication_user_change', args=[obj.user.id])
         return format_html('<a href="{}">{}</a>', url, obj.user.name)
 
     user_link.short_description = "User"
@@ -759,7 +759,7 @@ class AdminUserAdmin(admin.ModelAdmin):
     )
 
     def user_link(self, obj):
-        url = reverse('admin:auth_user_change', args=[obj.user.id])
+        url = reverse('admin:authentication_user_change', args=[obj.user.id])
         return format_html('<a href="{}">{}</a>', url, obj.user.name)
 
     user_link.short_description = "User"
@@ -898,7 +898,7 @@ class ApiUsageAdmin(admin.ModelAdmin):
 
     def user_link(self, obj):
         if obj.user:
-            url = reverse('admin:auth_user_change', args=[obj.user.id])
+            url = reverse('admin:authentication_user_change', args=[obj.user.id])
             return format_html('<a href="{}">{}</a>', url, obj.user.name)
         return "—"
 
@@ -941,7 +941,7 @@ class ActivityLogAdmin(admin.ModelAdmin):
 
     def user_link(self, obj):
         if obj.user:
-            url = reverse('admin:auth_user_change', args=[obj.user.id])
+            url = reverse('admin:authentication_user_change', args=[obj.user.id])
             return format_html('<a href="{}">{}</a>', url, obj.user.name)
         return "Anonymous"
 
