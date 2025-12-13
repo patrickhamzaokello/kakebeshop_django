@@ -1,11 +1,12 @@
-# kakebe_apps/interactions/views.py
-
 from rest_framework import viewsets, mixins, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated, IsAdminUser
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
+from django.db import models
+from drf_yasg.utils import swagger_auto_schema
+from drf_yasg import openapi
 
 from .models import (
     Favorite, SavedSearch, Conversation, Message, Notification,
@@ -18,6 +19,7 @@ from .serializers import (
     MerchantReviewSerializer, ReportSerializer, MerchantScoreSerializer,
     ActivityLogSerializer, AuditLogSerializer, ApiUsageSerializer
 )
+from ..listings.models import Listing
 
 
 class FavoriteViewSet(viewsets.ModelViewSet):
@@ -27,16 +29,41 @@ class FavoriteViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         return Favorite.objects.filter(user=self.request.user)
 
-    @action(detail=False)
+    @swagger_auto_schema(
+        method='post',
+        request_body=openapi.Schema(
+            type=openapi.TYPE_OBJECT,
+            properties={
+                'listing': openapi.Schema(
+                    type=openapi.TYPE_STRING,
+                    format=openapi.FORMAT_UUID,
+                    description='UUID of the listing'
+                )
+            },
+            required=['listing']
+        ),
+        responses={
+            200: openapi.Response('Favorite removed', examples={
+                'application/json': {'status': 'removed'}
+            }),
+            201: openapi.Response('Favorite added', examples={
+                'application/json': {'status': 'added'}
+            })
+        }
+    )
+    @action(detail=False, methods=['post'])
     def toggle(self, request):
         listing_id = request.data.get('listing')
         listing = get_object_or_404(Listing, id=listing_id)
 
-        obj, created = Favorite.objects.get_or_create(user=request.user, listing=listing)
+        obj, created = Favorite.objects.get_or_create(
+            user=request.user,
+            listing=listing
+        )
         if not created:
             obj.delete()
             return Response({'status': 'removed'})
-        return Response({'status': 'added'})
+        return Response({'status': 'added'}, status=status.HTTP_201_CREATED)
 
 
 class SavedSearchViewSet(viewsets.ModelViewSet):
@@ -53,6 +80,8 @@ class SavedSearchViewSet(viewsets.ModelViewSet):
 class ConversationViewSet(viewsets.ReadOnlyModelViewSet):
     serializer_class = ConversationSerializer
     permission_classes = [IsAuthenticated]
+    lookup_field = 'pk'
+    lookup_value_regex = '[0-9a-f-]{36}'  # UUID regex pattern
 
     def get_queryset(self):
         user = self.request.user
@@ -62,20 +91,68 @@ class ConversationViewSet(viewsets.ReadOnlyModelViewSet):
 
 
 class MessageViewSet(mixins.CreateModelMixin,
-                    mixins.ListModelMixin,
-                    viewsets.GenericViewSet):
+                     mixins.ListModelMixin,
+                     viewsets.GenericViewSet):
     serializer_class = MessageSerializer
     permission_classes = [IsAuthenticated]
 
+    @swagger_auto_schema(
+        manual_parameters=[
+            openapi.Parameter(
+                'conversation_id',
+                openapi.IN_PATH,
+                description="UUID of the conversation",
+                type=openapi.TYPE_STRING,
+                format=openapi.FORMAT_UUID,
+                required=True
+            )
+        ]
+    )
+    def list(self, request, *args, **kwargs):
+        return super().list(request, *args, **kwargs)
+
+    @swagger_auto_schema(
+        manual_parameters=[
+            openapi.Parameter(
+                'conversation_id',
+                openapi.IN_PATH,
+                description="UUID of the conversation",
+                type=openapi.TYPE_STRING,
+                format=openapi.FORMAT_UUID,
+                required=True
+            )
+        ]
+    )
+    def create(self, request, *args, **kwargs):
+        return super().create(request, *args, **kwargs)
+
     def get_queryset(self):
-        conversation = get_object_or_404(Conversation, id=self.kwargs['conversation_id'],
-                                         buyer=self.request.user) | get_object_or_404(Conversation, id=self.kwargs['conversation_id'],
-                                                                                     seller=self.request.user)
+        conversation_id = self.kwargs.get('conversation_id')
+        user = self.request.user
+
+        # Proper query to check if user is part of conversation
+        conversation = get_object_or_404(
+            Conversation.objects.filter(
+                models.Q(buyer=user) | models.Q(seller=user)
+            ),
+            id=conversation_id
+        )
+
         return conversation.messages.all()
 
     def perform_create(self, serializer):
-        conversation = get_object_or_404(Conversation, id=self.kwargs['conversation_id'])
-        serializer.save(sender=self.request.user, conversation=conversation)
+        conversation_id = self.kwargs.get('conversation_id')
+        user = self.request.user
+
+        # Ensure user is part of the conversation
+        conversation = get_object_or_404(
+            Conversation.objects.filter(
+                models.Q(buyer=user) | models.Q(seller=user)
+            ),
+            id=conversation_id
+        )
+
+        serializer.save(sender=user, conversation=conversation)
         conversation.last_message_at = timezone.now()
         conversation.save()
 
@@ -83,15 +160,25 @@ class MessageViewSet(mixins.CreateModelMixin,
 class NotificationViewSet(viewsets.ModelViewSet):
     serializer_class = NotificationSerializer
     permission_classes = [IsAuthenticated]
+    lookup_field = 'pk'
+    lookup_value_regex = '[0-9a-f-]{36}'  # UUID regex pattern
 
     def get_queryset(self):
         return Notification.objects.filter(user=self.request.user)
 
+    @swagger_auto_schema(
+        method='post',
+        responses={200: openapi.Response('All notifications marked as read')}
+    )
     @action(detail=False, methods=['post'])
     def mark_all_read(self, request):
         self.get_queryset().update(is_read=True)
         return Response({'status': 'all read'})
 
+    @swagger_auto_schema(
+        method='post',
+        responses={200: openapi.Response('Notification marked as read')}
+    )
     @action(detail=True, methods=['post'])
     def mark_read(self, request, pk=None):
         notification = self.get_object()
@@ -103,6 +190,8 @@ class NotificationViewSet(viewsets.ModelViewSet):
 class ListingReviewViewSet(viewsets.ModelViewSet):
     serializer_class = ListingReviewSerializer
     permission_classes = [IsAuthenticated]
+    lookup_field = 'pk'
+    lookup_value_regex = '[0-9a-f-]{36}'  # UUID regex pattern
 
     def get_queryset(self):
         return ListingReview.objects.filter(user=self.request.user)
@@ -114,6 +203,8 @@ class ListingReviewViewSet(viewsets.ModelViewSet):
 class MerchantReviewViewSet(viewsets.ModelViewSet):
     serializer_class = MerchantReviewSerializer
     permission_classes = [IsAuthenticated]
+    lookup_field = 'pk'
+    lookup_value_regex = '[0-9a-f-]{36}'  # UUID regex pattern
 
     def get_queryset(self):
         return MerchantReview.objects.filter(user=self.request.user)
@@ -133,7 +224,9 @@ class ReportViewSet(mixins.CreateModelMixin, viewsets.GenericViewSet):
 class MerchantScoreViewSet(viewsets.ReadOnlyModelViewSet):
     queryset = MerchantScore.objects.all()
     serializer_class = MerchantScoreSerializer
-    permission_classes = [IsAuthenticated]  # Or public if needed
+    permission_classes = [IsAuthenticated]
+    lookup_field = 'pk'
+    lookup_value_regex = '[0-9a-f-]{36}'  # UUID regex pattern
 
 
 # Admin-only logs
@@ -141,15 +234,21 @@ class ActivityLogViewSet(viewsets.ReadOnlyModelViewSet):
     queryset = ActivityLog.objects.all()
     serializer_class = ActivityLogSerializer
     permission_classes = [IsAdminUser]
+    lookup_field = 'pk'
+    lookup_value_regex = '[0-9a-f-]{36}'  # UUID regex pattern
 
 
 class AuditLogViewSet(viewsets.ReadOnlyModelViewSet):
     queryset = AuditLog.objects.all()
     serializer_class = AuditLogSerializer
     permission_classes = [IsAdminUser]
+    lookup_field = 'pk'
+    lookup_value_regex = '[0-9a-f-]{36}'  # UUID regex pattern
 
 
 class ApiUsageViewSet(viewsets.ReadOnlyModelViewSet):
     queryset = ApiUsage.objects.all()
     serializer_class = ApiUsageSerializer
     permission_classes = [IsAdminUser]
+    lookup_field = 'pk'
+    lookup_value_regex = '[0-9a-f-]{36}'  # UUID regex pattern
