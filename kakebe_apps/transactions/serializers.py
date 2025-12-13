@@ -87,7 +87,7 @@ class TransactionStatusUpdateSerializer(serializers.ModelSerializer):
     class Meta:
         model = Transaction
         fields = ['status', 'payment_reference', 'completed_at']
-        read_only_fields = ['payment_reference']  # can be set by webhook
+        read_only_fields = ['payment_reference',]  # can be set by webhook
 
     def validate_status(self, value):
         instance = self.instance
