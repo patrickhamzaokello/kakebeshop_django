@@ -420,18 +420,40 @@ class MerchantReviewAdmin(admin.ModelAdmin):
     search_fields = ('merchant__display_name', 'user__name', 'comment')
     list_per_page = 25
     readonly_fields = ('id', 'created_at', 'updated_at', 'merchant_link', 'user_link', 'order_intent_link')
+    fieldsets = (
+        ('Review Details', {
+            'fields': ('merchant_link', 'user_link', 'rating', 'comment')
+        }),
+        ('Context', {
+            'fields': ('order_intent_link',),
+            'classes': ('collapse',)
+        }),
+        ('Timestamps', {
+            'fields': ('created_at', 'updated_at'),
+            'classes': ('collapse',)
+        })
+    )
 
     def merchant_link(self, obj):
         url = reverse('admin:merchants_merchant_change', args=[obj.merchant.id])
         return format_html('<a href="{}">{}</a>', url, obj.merchant.display_name)
 
     merchant_link.short_description = "Merchant"
+    merchant_link.admin_order_field = 'merchant__display_name'
+
+    def user_link(self, obj):
+        url = reverse('admin:auth_user_change', args=[obj.user.id])
+        return format_html('<a href="{}">{}</a>', url, obj.user.name)
+
+    user_link.short_description = "User"
+    user_link.admin_order_field = 'user__name'
 
     def rating_stars(self, obj):
         stars = '★' * obj.rating + '☆' * (5 - obj.rating)
         return format_html('<span style="color: #FFD700; font-size: 1.2em;">{}</span>', stars)
 
     rating_stars.short_description = "Rating"
+    rating_stars.admin_order_field = 'rating'
 
     def comment_preview(self, obj):
         if obj.comment:
@@ -439,6 +461,14 @@ class MerchantReviewAdmin(admin.ModelAdmin):
         return "—"
 
     comment_preview.short_description = "Comment"
+
+    def order_intent_link(self, obj):
+        if obj.order_intent:
+            url = reverse('admin:orders_orderintent_change', args=[obj.order_intent.id])
+            return format_html('<a href="{}">Order #{}</a>', url, str(obj.order_intent.id)[:8])
+        return "—"
+
+    order_intent_link.short_description = "Order Intent"
 
 
 # ========== MerchantScore Admin ==========
