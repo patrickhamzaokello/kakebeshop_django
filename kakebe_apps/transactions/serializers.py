@@ -31,7 +31,7 @@ class TransactionSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = [
             'transaction_number', 'status', 'completed_at', 'created_at',
-            'buyer', 'merchant', 'total_amount'
+            'buyer', 'merchant', 'total_amount',
         ]
 
     def validate(self, attrs):
