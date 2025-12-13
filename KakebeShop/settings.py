@@ -63,6 +63,15 @@ THIRD_PARTY_APPS = [
 LOCAL_APPS = [
     'kakebe_apps.authentication',
     'kakebe_apps.social_auth',
+    'kakebe_apps.cart',
+    'kakebe_apps.orders',
+    'kakebe_apps.categories',
+    'kakebe_apps.engagement',
+    'kakebe_apps.listings',
+    'kakebe_apps.location',
+    'kakebe_apps.merchants',
+    'kakebe_apps.promotions',
+    'kakebe_apps.transactions',
 ]
 
 INSTALLED_APPS = DJANGO_APPS + THIRD_PARTY_APPS + LOCAL_APPS
