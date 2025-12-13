@@ -38,6 +38,27 @@ urlpatterns = [
     path('social_auth/', include(('kakebe_apps.social_auth.urls', 'social_auth'), namespace="social_auth")),
     path('health/', health_check, name='health_check'),
 
+
+    #================ Apps api====================
+    path('api/v1/', include([
+        path('', include('kakebe_apps.categories.urls')),
+        path('', include('kakebe_apps.listings.urls')),
+        path('', include('kakebe_apps.location.urls')),
+        path('', include('kakebe_apps.merchants.urls')),
+
+        path('', include('kakebe_apps.cart.urls')),
+        path('', include('kakebe_apps.orders.urls')),
+        path('', include('kakebe_apps.transactions.urls')),
+        path('', include('kakebe_apps.engagement.urls')),
+        path('', include('kakebe_apps.promotions.urls')),
+
+    ])),
+
+
+    #=============== END OF APPS APIs ==============================
+
+
+
     # Swagger endpoints
     path('', schema_view.with_ui('swagger', cache_timeout=0), name='schema-swagger-ui'),
     path('api/api.json/', schema_view.without_ui(cache_timeout=0), name='schema-json'),
