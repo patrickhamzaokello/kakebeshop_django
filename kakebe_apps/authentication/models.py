@@ -62,6 +62,7 @@ class User(AbstractBaseUser, PermissionsMixin):
     username = models.CharField(max_length=255, unique=True, db_index=True)
     name = models.CharField(max_length=255)
     email = models.EmailField(max_length=255, unique=True, db_index=True)
+    profile_image = models.URLField(blank=True, null=True)
     phone = models.CharField(max_length=255,blank=True, null=True)
     bio = models.TextField(blank=True, null=True)
     is_verified = models.BooleanField(default=False)
