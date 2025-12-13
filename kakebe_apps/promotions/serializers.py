@@ -1,6 +1,7 @@
 # kakebe_apps/promotions/serializers.py
 
 from rest_framework import serializers
+from django.utils import timezone
 
 from .models import (
     PromotionalCampaign, CampaignListing,
@@ -11,7 +12,7 @@ from kakebe_apps.listings.models import Listing
 
 class CampaignListingSerializer(serializers.ModelSerializer):
     listing_title = serializers.CharField(source='listing.title', read_only=True)
-    listing_image = serializers.URLField(source='listing.main_image', read_only=True)  # adjust field name if needed
+    listing_image = serializers.URLField(source='listing.main_image', read_only=True)
 
     class Meta:
         model = CampaignListing
@@ -48,7 +49,8 @@ class CampaignCreativeSerializer(serializers.ModelSerializer):
 
 class PromotionalCampaignSerializer(serializers.ModelSerializer):
     creatives = CampaignCreativeSerializer(many=True, read_only=True)
-    listings = CampaignListingSerializer(many=True, source='listings', read_only=True)
+    # FIXED: Removed redundant source='listings' since field name matches the relation name
+    listings = CampaignListingSerializer(many=True, read_only=True)
 
     class Meta:
         model = PromotionalCampaign
@@ -69,17 +71,18 @@ class PromotionalCampaignSerializer(serializers.ModelSerializer):
 
         status = attrs.get('status')
         if status == 'ACTIVE':
-            from django.utils import timezone
             now = timezone.now()
-            if start_date > now or (end_date and end_date < now):
-                raise serializers.ValidationError("Cannot activate campaign outside date range.")
+            if start_date and start_date > now:
+                raise serializers.ValidationError("Cannot activate campaign before start_date.")
+            if end_date and end_date < now:
+                raise serializers.ValidationError("Cannot activate campaign after end_date.")
 
         return attrs
 
 
 # Read-only serializer for public active creatives (e.g., home page banners)
 class ActiveCreativeSerializer(serializers.ModelSerializer):
-    placements = CampaignPlacementSerializer(many=True)
+    placements = CampaignPlacementSerializer(many=True, read_only=True)
 
     class Meta:
         model = CampaignCreative
@@ -88,3 +91,4 @@ class ActiveCreativeSerializer(serializers.ModelSerializer):
             'thumbnail', 'platform', 'cta_text', 'sort_order',
             'placements'
         ]
+        read_only_fields = fields  # All fields are read-only
