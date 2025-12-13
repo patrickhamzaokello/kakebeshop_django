@@ -29,10 +29,7 @@ class TransactionSerializer(serializers.ModelSerializer):
             'status', 'completed_at', 'created_at',
             'buyer', 'merchant', 'total_amount'
         ]
-        read_only_fields = [
-            'transaction_number', 'status', 'completed_at', 'created_at',
-            'buyer', 'merchant', 'total_amount',
-        ]
+        read_only_fields = ('transaction_number', 'status', 'completed_at', 'created_at','buyer', 'merchant', 'total_amount')
 
     def validate(self, attrs):
         order_intent = attrs['order_intent']
