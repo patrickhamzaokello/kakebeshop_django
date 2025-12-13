@@ -15,7 +15,7 @@ from kakebe_apps.orders.models import OrderIntent
 
 class FavoriteSerializer(serializers.ModelSerializer):
     listing_title = serializers.CharField(source='listing.title', read_only=True)
-    listing_image = serializers.URLField(source='listing.main_image', read_only=True)  # adjust field
+    listing_image = serializers.URLField(source='listing.main_image', read_only=True)
 
     class Meta:
         model = Favorite
@@ -122,29 +122,53 @@ class ReportSerializer(serializers.ModelSerializer):
 
 
 # Read-only serializers for logs/scores
+# FIXED: Cannot use '__all__' with read_only_fields
+# For read-only serializers, simply don't include read_only_fields
+# OR override create/update methods to make them read-only
+
 class MerchantScoreSerializer(serializers.ModelSerializer):
     class Meta:
         model = MerchantScore
         fields = '__all__'
-        read_only_fields = '__all__'
+
+    def create(self, validated_data):
+        raise serializers.ValidationError("This is a read-only endpoint")
+
+    def update(self, instance, validated_data):
+        raise serializers.ValidationError("This is a read-only endpoint")
 
 
 class ActivityLogSerializer(serializers.ModelSerializer):
     class Meta:
         model = ActivityLog
         fields = '__all__'
-        read_only_fields = '__all__'
+
+    def create(self, validated_data):
+        raise serializers.ValidationError("This is a read-only endpoint")
+
+    def update(self, instance, validated_data):
+        raise serializers.ValidationError("This is a read-only endpoint")
 
 
 class AuditLogSerializer(serializers.ModelSerializer):
     class Meta:
         model = AuditLog
         fields = '__all__'
-        read_only_fields = '__all__'
+
+    def create(self, validated_data):
+        raise serializers.ValidationError("This is a read-only endpoint")
+
+    def update(self, instance, validated_data):
+        raise serializers.ValidationError("This is a read-only endpoint")
 
 
 class ApiUsageSerializer(serializers.ModelSerializer):
     class Meta:
         model = ApiUsage
         fields = '__all__'
-        read_only_fields = '__all__'
+
+    def create(self, validated_data):
+        raise serializers.ValidationError("This is a read-only endpoint")
+
+    def update(self, instance, validated_data):
+        raise serializers.ValidationError("This is a read-only endpoint")
