@@ -6,7 +6,7 @@ from django.contrib.auth import get_user_model
 from .models import (
     Favorite, SavedSearch, Conversation, Message, Notification,
     ListingReview, MerchantReview, Report, FollowUpRule, FollowUpLog,
-    AdminUser, AuditLog, ApiUsage, ActivityLog, MerchantScore
+    AdminUser, AuditLog, ApiUsage, ActivityLog, MerchantScore, PushToken
 )
 from kakebe_apps.listings.models import Listing
 from kakebe_apps.merchants.models import Merchant
@@ -289,3 +289,48 @@ class UserProfileSerializer(serializers.ModelSerializer):
             'updated_at'
         ]
         read_only_fields = ['id', 'email', 'username', 'created_at', 'updated_at']
+
+
+class PushTokenSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = PushToken
+        fields = ['id', 'token', 'device_id', 'platform', 'is_active', 'last_used', 'created_at']
+        read_only_fields = ['id', 'last_used', 'created_at']
+
+    def validate_token(self, value):
+        """Validate push token format"""
+        if not value.strip():
+            raise serializers.ValidationError("Token cannot be empty.")
+
+        # Validate Expo push token format
+        if value.startswith('ExponentPushToken['):
+            if not value.endswith(']') or len(value) < 20:
+                raise serializers.ValidationError("Invalid Expo push token format.")
+
+        return value
+
+
+class PushTokenCreateSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = PushToken
+        fields = ['token', 'device_id', 'platform']
+
+    def validate_token(self, value):
+        """Validate push token format"""
+        if not value.strip():
+            raise serializers.ValidationError("Token cannot be empty.")
+
+        # Validate Expo push token format
+        if value.startswith('ExponentPushToken['):
+            if not value.endswith(']') or len(value) < 20:
+                raise serializers.ValidationError("Invalid Expo push token format.")
+
+        return value
+
+class PushTokenUpdateUsageSerializer(serializers.Serializer):
+    token = serializers.CharField(max_length=200)
+
+    def validate_token(self, value):
+        if not value.strip():
+            raise serializers.ValidationError("Token cannot be empty.")
+        return value

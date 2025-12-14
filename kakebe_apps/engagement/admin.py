@@ -10,7 +10,7 @@ from .models import (
     Favorite, SavedSearch, Conversation, Message, Notification,
     ListingReview, MerchantReview, MerchantScore, Report,
     FollowUpRule, FollowUpLog, AdminUser, AuditLog,
-    ApiUsage, ActivityLog, OnboardingStatus, UserIntent
+    ApiUsage, ActivityLog, OnboardingStatus, UserIntent, PushToken
 )
 
 
@@ -1319,3 +1319,101 @@ class OnboardingStatusAdmin(admin.ModelAdmin):
         self.message_user(request, f"{queryset.count()} profiles marked as complete")
 
     mark_profile_complete.short_description = "Mark profile as complete"
+
+
+@admin.register(PushToken)
+class PushTokenAdmin(admin.ModelAdmin):
+    list_display = [
+        'user', 'token_short', 'platform', 'is_active',
+        'last_used', 'created_at', 'notification_count'
+    ]
+    list_filter = ['platform', 'is_active', 'created_at', 'last_used']
+    search_fields = ['user__username', 'token', 'device_id']
+    readonly_fields = ['created_at', 'updated_at', 'last_used']
+    actions = ['mark_inactive', 'mark_active', 'test_token']
+
+    fieldsets = (
+        ('Token Information', {
+            'fields': ('user', 'token', 'device_id', 'platform', 'is_active')
+        }),
+        ('Timestamps', {
+            'fields': ('created_at', 'updated_at', 'last_used')
+        }),
+    )
+
+    def token_short(self, obj):
+        return obj.token[:20] + "..." if len(obj.token) > 20 else obj.token
+
+    token_short.short_description = 'Token'
+
+    def notification_count(self, obj):
+        """Count notifications sent to this user"""
+        return obj.user.notifications.count()
+
+    notification_count.short_description = 'Notifs Sent'
+
+    def mark_inactive(self, request, queryset):
+        """Mark selected tokens as inactive"""
+        updated = queryset.update(is_active=False)
+        self.message_user(request, f"Marked {updated} token(s) as inactive")
+
+    mark_inactive.short_description = "Mark as inactive"
+
+    def mark_active(self, request, queryset):
+        """Mark selected tokens as active"""
+        updated = queryset.update(is_active=True)
+        self.message_user(request, f"Marked {updated} token(s) as active")
+
+    mark_active.short_description = "Mark as active"
+
+    def test_token(self, request, queryset):
+        """Send a test notification to selected tokens"""
+        import requests
+        from django.contrib import messages
+
+        api_url = 'http://notification-service:4000/api/push-notification'
+        success_count = 0
+        error_count = 0
+
+        for token_obj in queryset:
+            if not token_obj.is_active:
+                messages.warning(request, f"Skipped inactive token for {token_obj.user.username}")
+                continue
+
+            try:
+                message = {
+                    'token': token_obj.token,
+                    'title': '🔔 Test Notification',
+                    'body': f'This is a test notification for {token_obj.user.username}',
+                    'metadata': {
+                        'userId': str(token_obj.user.id),
+                        'notificationType': 'test',
+                        'source': 'admin_panel'
+                    }
+                }
+
+                response = requests.post(
+                    api_url,
+                    json={'messages': [message]},
+                    headers={'Content-Type': 'application/json'},
+                    timeout=10
+                )
+
+                if response.status_code == 200:
+                    success_count += 1
+                else:
+                    error_count += 1
+                    messages.error(
+                        request,
+                        f"Failed to send to {token_obj.user.username}: {response.status_code}"
+                    )
+            except Exception as e:
+                error_count += 1
+                messages.error(request, f"Error sending to {token_obj.user.username}: {str(e)}")
+
+        if success_count > 0:
+            messages.success(request, f"Successfully sent {success_count} test notification(s)")
+        if error_count > 0:
+            messages.error(request, f"Failed to send {error_count} test notification(s)")
+
+    test_token.short_description = "Send test notification"

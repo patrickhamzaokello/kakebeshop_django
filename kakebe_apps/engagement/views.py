@@ -11,13 +11,14 @@ from django.db import models
 from .models import (
     Favorite, SavedSearch, Conversation, Message, Notification,
     ListingReview, MerchantReview, Report, MerchantScore,
-    ActivityLog, AuditLog, ApiUsage, OnboardingStatus, UserIntent
+    ActivityLog, AuditLog, ApiUsage, OnboardingStatus, UserIntent, PushToken
 )
 from .serializers import (
     FavoriteSerializer, SavedSearchSerializer, ConversationSerializer,
     MessageSerializer, NotificationSerializer, ListingReviewSerializer,
     MerchantReviewSerializer, ReportSerializer, MerchantScoreSerializer,
-    ActivityLogSerializer, AuditLogSerializer, ApiUsageSerializer, OnboardingStatusSerializer, UserIntentSerializer
+    ActivityLogSerializer, AuditLogSerializer, ApiUsageSerializer, OnboardingStatusSerializer, UserIntentSerializer,
+    PushTokenSerializer, PushTokenCreateSerializer, PushTokenUpdateUsageSerializer
 )
 from ..listings.models import Listing
 
@@ -301,3 +302,339 @@ class OnboardingStatusViewSet(viewsets.ReadOnlyModelViewSet):
     def my_status(self, request):
         """Get current user's onboarding status - convenient endpoint"""
         return self.list(request)
+
+
+class PushTokenViewSet(viewsets.ModelViewSet):
+    """
+    ViewSet for managing push tokens.
+
+    list: Get all active push tokens for the authenticated user
+    create: Create or update a push token
+    retrieve: Get a specific push token by ID
+    update: Update a push token
+    partial_update: Partially update a push token
+    destroy: Deactivate a push token (soft delete)
+    """
+
+    serializer_class = PushTokenSerializer
+    permission_classes = [IsAuthenticated]
+    lookup_field = 'id'
+
+    def get_queryset(self):
+        """Return only the authenticated user's tokens"""
+        return PushToken.objects.filter(user=self.request.user)
+
+    def get_serializer_class(self):
+        """Use different serializers for different actions"""
+        if self.action == 'create':
+            return PushTokenCreateSerializer
+        elif self.action == 'update_usage':
+            return PushTokenUpdateUsageSerializer
+        return PushTokenSerializer
+
+    def list(self, request, *args, **kwargs):
+        """
+        Get all active push tokens for the authenticated user.
+
+        GET /api/push-tokens/
+        """
+        queryset = self.get_queryset().filter(is_active=True)
+        serializer = self.get_serializer(queryset, many=True)
+
+        return Response({
+            'success': True,
+            'tokens': serializer.data,
+            'count': queryset.count()
+        }, status=status.HTTP_200_OK)
+
+    def create(self, request, *args, **kwargs):
+        """
+        Get or create a push token for the authenticated user.
+
+        POST /api/push-tokens/
+        {
+            "token": "ExponentPushToken[AQ5CCJA9AMg9mCUx6X_wOH]",
+            "device_id": "unique-device-identifier",
+            "platform": "ios"
+        }
+        """
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        token_value = serializer.validated_data['token']
+        device_id = serializer.validated_data.get('device_id', '')
+        platform = serializer.validated_data.get('platform', '')
+
+        # Try to get existing token
+        if device_id:
+            # If device_id provided, look for existing token for this user+device
+            push_token, created = PushToken.objects.get_or_create(
+                user=request.user,
+                device_id=device_id,
+                defaults={
+                    'token': token_value,
+                    'platform': platform,
+                    'is_active': True,
+                    'last_used': timezone.now()
+                }
+            )
+
+            if not created:
+                # Update existing token if it changed
+                if push_token.token != token_value:
+                    push_token.token = token_value
+                    push_token.platform = platform
+                    push_token.is_active = True
+                push_token.last_used = timezone.now()
+                push_token.save()
+        else:
+            # No device_id provided, check if token already exists for this user
+            try:
+                push_token = PushToken.objects.get(user=request.user, token=token_value)
+                push_token.last_used = timezone.now()
+                push_token.is_active = True
+                if platform:
+                    push_token.platform = platform
+                push_token.save()
+                created = False
+            except PushToken.DoesNotExist:
+                push_token = PushToken.objects.create(
+                    user=request.user,
+                    token=token_value,
+                    device_id=device_id,
+                    platform=platform,
+                    is_active=True,
+                    last_used=timezone.now()
+                )
+                created = True
+
+        response_serializer = PushTokenSerializer(push_token)
+        response_status = status.HTTP_201_CREATED if created else status.HTTP_200_OK
+
+        return Response({
+            'success': True,
+            'token': response_serializer.data,
+            'created': created,
+            'message': 'Token created successfully' if created else 'Token updated successfully'
+        }, status=response_status)
+
+    def retrieve(self, request, *args, **kwargs):
+        """
+        Retrieve a specific push token.
+
+        GET /api/push-tokens/{id}/
+        """
+        instance = self.get_object()
+        serializer = self.get_serializer(instance)
+
+        return Response({
+            'success': True,
+            'token': serializer.data
+        }, status=status.HTTP_200_OK)
+
+    def update(self, request, *args, **kwargs):
+        """
+        Update a push token and refresh last_used timestamp.
+
+        PUT /api/push-tokens/{id}/
+        """
+        partial = kwargs.pop('partial', False)
+        instance = self.get_object()
+        serializer = self.get_serializer(instance, data=request.data, partial=partial)
+        serializer.is_valid(raise_exception=True)
+
+        # Update last_used timestamp
+        instance.last_used = timezone.now()
+        self.perform_update(serializer)
+
+        return Response({
+            'success': True,
+            'message': 'Token updated successfully',
+            'token': serializer.data
+        }, status=status.HTTP_200_OK)
+
+    def partial_update(self, request, *args, **kwargs):
+        """
+        Partially update a push token.
+
+        PATCH /api/push-tokens/{id}/
+        """
+        kwargs['partial'] = True
+        return self.update(request, *args, **kwargs)
+
+    def destroy(self, request, *args, **kwargs):
+        """
+        Deactivate a push token (soft delete).
+
+        DELETE /api/push-tokens/{id}/
+        """
+        instance = self.get_object()
+        instance.is_active = False
+        instance.save()
+
+        return Response({
+            'success': True,
+            'message': 'Token deactivated successfully'
+        }, status=status.HTTP_200_OK)
+
+    @action(detail=False, methods=['get'])
+    def active(self, request):
+        """
+        Get all active tokens (alias for list).
+
+        GET /api/push-tokens/active/
+        """
+        return self.list(request)
+
+    @action(detail=False, methods=['delete'])
+    def deactivate_by_value(self, request):
+        """
+        Deactivate a push token by token value.
+
+        DELETE /api/push-tokens/deactivate-by-value/
+        {
+            "token": "ExponentPushToken[AQ5CCJA9AMg9mCUx6X_wOH]"
+        }
+        """
+        token_value = request.data.get('token')
+        if not token_value:
+            return Response({
+                'success': False,
+                'error': 'Token value required'
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            push_token = PushToken.objects.get(
+                token=token_value,
+                user=request.user
+            )
+            push_token.is_active = False
+            push_token.save()
+
+            return Response({
+                'success': True,
+                'message': 'Token deactivated successfully'
+            }, status=status.HTTP_200_OK)
+
+        except PushToken.DoesNotExist:
+            return Response({
+                'success': False,
+                'error': 'Token not found'
+            }, status=status.HTTP_404_NOT_FOUND)
+
+    @action(detail=False, methods=['post'])
+    def update_usage(self, request):
+        """
+        Update last_used timestamp for a token.
+
+        POST /api/push-tokens/update-usage/
+        {
+            "token": "ExponentPushToken[AQ5CCJA9AMg9mCUx6X_wOH]"
+        }
+        """
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        token_value = serializer.validated_data['token']
+
+        try:
+            push_token = PushToken.objects.get(
+                token=token_value,
+                user=request.user,
+                is_active=True
+            )
+            push_token.last_used = timezone.now()
+            push_token.save()
+
+            return Response({
+                'success': True,
+                'message': 'Token usage updated successfully',
+                'last_used': push_token.last_used
+            }, status=status.HTTP_200_OK)
+
+        except PushToken.DoesNotExist:
+            return Response({
+                'success': False,
+                'error': 'Active token not found'
+            }, status=status.HTTP_404_NOT_FOUND)
+
+    @action(detail=False, methods=['post'])
+    def bulk_deactivate(self, request):
+        """
+        Deactivate multiple tokens at once.
+
+        POST /api/push-tokens/bulk-deactivate/
+        {
+            "token_ids": [1, 2, 3]
+        }
+        OR
+        {
+            "tokens": ["ExponentPushToken[...]", "ExponentPushToken[...]"]
+        }
+        """
+        token_ids = request.data.get('token_ids', [])
+        tokens = request.data.get('tokens', [])
+
+        if not token_ids and not tokens:
+            return Response({
+                'success': False,
+                'error': 'Either token_ids or tokens array required'
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+        updated_count = 0
+
+        if token_ids:
+            updated_count = PushToken.objects.filter(
+                id__in=token_ids,
+                user=request.user
+            ).update(is_active=False)
+
+        if tokens:
+            updated_count += PushToken.objects.filter(
+                token__in=tokens,
+                user=request.user
+            ).update(is_active=False)
+
+        return Response({
+            'success': True,
+            'message': f'{updated_count} tokens deactivated successfully',
+            'deactivated_count': updated_count
+        }, status=status.HTTP_200_OK)
+
+    @action(detail=False, methods=['delete'])
+    def deactivate_all(self, request):
+        """
+        Deactivate all tokens for the authenticated user.
+
+        DELETE /api/push-tokens/deactivate-all/
+        """
+        updated_count = PushToken.objects.filter(
+            user=request.user,
+            is_active=True
+        ).update(is_active=False)
+
+        return Response({
+            'success': True,
+            'message': f'All tokens deactivated successfully',
+            'deactivated_count': updated_count
+        }, status=status.HTTP_200_OK)
+
+    @action(detail=True, methods=['post'])
+    def reactivate(self, request, id=None):
+        """
+        Reactivate a previously deactivated token.
+
+        POST /api/push-tokens/{id}/reactivate/
+        """
+        instance = self.get_object()
+        instance.is_active = True
+        instance.last_used = timezone.now()
+        instance.save()
+
+        serializer = self.get_serializer(instance)
+
+        return Response({
+            'success': True,
+            'message': 'Token reactivated successfully',
+            'token': serializer.data
+        }, status=status.HTTP_200_OK)
