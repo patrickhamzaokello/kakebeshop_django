@@ -1,7 +1,7 @@
 # authentication/email_templates.py
 """
-Email templates for authentication system
-Supports both plain text and HTML formats
+Minimalistic Email Templates for KakebeShop
+Clean, elegant, monochromatic design (black and white)
 """
 
 from django.conf import settings
@@ -9,11 +9,11 @@ from typing import Dict, Any
 
 
 class EmailTemplates:
-    """Centralized email templates with HTML and plain text versions"""
+    """Minimalistic monochromatic email templates for KakebeShop"""
 
     @staticmethod
     def get_base_html_template() -> str:
-        """Base HTML template with styling"""
+        """Minimalistic base HTML template - clean and compact"""
         return """
 <!DOCTYPE html>
 <html lang="en">
@@ -22,122 +22,133 @@ class EmailTemplates:
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{subject}</title>
     <style>
-        body {{
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
-            line-height: 1.6;
-            color: #333;
-            background-color: #f4f4f4;
+        * {{
             margin: 0;
             padding: 0;
+            box-sizing: border-box;
         }}
-        .container {{
-            max-width: 600px;
-            margin: 0 auto;
+        body {{
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Helvetica Neue', Arial, sans-serif;
+            line-height: 1.6;
+            color: #000000;
             background-color: #ffffff;
             padding: 0;
+            margin: 0;
+        }}
+        .container {{
+            max-width: 560px;
+            margin: 40px auto;
+            background-color: #ffffff;
         }}
         .header {{
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-            padding: 40px 20px;
             text-align: center;
+            padding: 32px 20px 24px;
+            border-bottom: 2px solid #000000;
         }}
-        .header h1 {{
-            margin: 0;
-            font-size: 28px;
-            font-weight: 600;
+        .logo {{
+            font-size: 24px;
+            font-weight: 700;
+            letter-spacing: -0.5px;
+            color: #000000;
+            text-transform: uppercase;
         }}
         .content {{
-            padding: 40px 30px;
+            padding: 32px 20px;
         }}
         .greeting {{
-            font-size: 18px;
-            color: #333;
-            margin-bottom: 20px;
+            font-size: 16px;
+            color: #000000;
+            margin-bottom: 16px;
+            font-weight: 500;
         }}
         .message {{
-            font-size: 16px;
-            color: #555;
-            margin-bottom: 30px;
-            line-height: 1.8;
+            font-size: 15px;
+            color: #333333;
+            margin-bottom: 20px;
+            line-height: 1.7;
         }}
         .code-container {{
-            background-color: #f8f9fa;
-            border: 2px dashed #667eea;
-            border-radius: 8px;
-            padding: 20px;
+            background-color: #f8f8f8;
+            border: 1px solid #000000;
+            padding: 24px;
             text-align: center;
-            margin: 30px 0;
+            margin: 28px 0;
+        }}
+        .code-label {{
+            font-size: 11px;
+            color: #666666;
+            margin-bottom: 8px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            font-weight: 500;
         }}
         .code {{
             font-size: 32px;
-            font-weight: bold;
-            color: #667eea;
-            letter-spacing: 8px;
+            font-weight: 700;
+            color: #000000;
+            letter-spacing: 6px;
             font-family: 'Courier New', monospace;
+            margin: 8px 0;
         }}
-        .code-label {{
+        .info-box {{
+            border-left: 3px solid #000000;
+            padding: 12px 16px;
+            margin: 20px 0;
+            background-color: #fafafa;
+        }}
+        .info-box p {{
+            margin: 0;
             font-size: 14px;
-            color: #666;
-            margin-bottom: 10px;
-            text-transform: uppercase;
-            letter-spacing: 1px;
+            color: #333333;
+            line-height: 1.6;
         }}
-        .expiry {{
-            background-color: #fff3cd;
-            border-left: 4px solid #ffc107;
-            padding: 15px;
+        .warning-box {{
+            border: 1px solid #000000;
+            padding: 16px;
             margin: 20px 0;
-            border-radius: 4px;
+            background-color: #f5f5f5;
         }}
-        .expiry-icon {{
-            color: #ffc107;
-            margin-right: 8px;
+        .warning-box p {{
+            margin: 0;
+            font-size: 14px;
+            color: #000000;
+            line-height: 1.6;
         }}
-        .warning {{
-            background-color: #f8d7da;
-            border-left: 4px solid #dc3545;
-            padding: 15px;
-            margin: 20px 0;
-            border-radius: 4px;
-            color: #721c24;
+        .divider {{
+            height: 1px;
+            background-color: #e0e0e0;
+            margin: 28px 0;
         }}
         .footer {{
-            background-color: #f8f9fa;
-            padding: 30px;
+            padding: 24px 20px;
             text-align: center;
-            border-top: 1px solid #e9ecef;
+            border-top: 1px solid #e0e0e0;
         }}
-        .footer p {{
-            margin: 5px 0;
-            font-size: 14px;
-            color: #6c757d;
+        .footer-text {{
+            font-size: 13px;
+            color: #666666;
+            margin: 4px 0;
+            line-height: 1.5;
         }}
-        .button {{
-            display: inline-block;
-            padding: 12px 30px;
-            background-color: #667eea;
-            color: white;
-            text-decoration: none;
-            border-radius: 5px;
-            margin: 20px 0;
+        .footer-brand {{
             font-weight: 600;
+            color: #000000;
+            font-size: 13px;
         }}
-        .social-links {{
-            margin-top: 20px;
-        }}
-        .social-links a {{
-            color: #667eea;
-            text-decoration: none;
-            margin: 0 10px;
+        .link {{
+            color: #000000;
+            text-decoration: underline;
         }}
         @media only screen and (max-width: 600px) {{
+            .container {{
+                margin: 20px auto;
+            }}
             .content {{
-                padding: 30px 20px;
+                padding: 24px 16px;
             }}
             .code {{
                 font-size: 28px;
-                letter-spacing: 6px;
+                letter-spacing: 4px;
             }}
         }}
     </style>
@@ -145,22 +156,15 @@ class EmailTemplates:
 <body>
     <div class="container">
         <div class="header">
-            <h1>🔐 {company_name}</h1>
+            <div class="logo">{company_name}</div>
         </div>
         <div class="content">
             {content}
         </div>
         <div class="footer">
-            <p><strong>{company_name}</strong></p>
-            <p>Building the future of secure authentication</p>
-            <p style="margin-top: 15px; font-size: 12px;">
-                © {year} {company_name}. All rights reserved.
-            </p>
-            <div class="social-links">
-                <a href="#">Twitter</a> •
-                <a href="#">LinkedIn</a> •
-                <a href="#">Support</a>
-            </div>
+            <p class="footer-brand">{company_name}</p>
+            <p class="footer-text">Online Marketplace</p>
+            <p class="footer-text" style="margin-top: 12px;">© {year} {company_name}. All rights reserved.</p>
         </div>
     </div>
 </body>
@@ -169,66 +173,54 @@ class EmailTemplates:
 
     @classmethod
     def email_verification(cls, user_name: str, verification_code: str) -> Dict[str, str]:
-        """Email verification template"""
+        """Email verification template - minimalistic design"""
 
         content = f"""
             <p class="greeting">Hello {user_name},</p>
             <p class="message">
-                Welcome aboard! 🎉 We're excited to have you join our community. 
-                To get started and secure your account, please verify your email address.
+                Welcome to KakebeShop. Please verify your email address to activate your account.
             </p>
 
             <div class="code-container">
-                <div class="code-label">Your Verification Code</div>
+                <div class="code-label">Verification Code</div>
                 <div class="code">{verification_code}</div>
             </div>
 
-            <div class="expiry">
-                <span class="expiry-icon">⏰</span>
-                <strong>Important:</strong> This code will expire in 30 minutes for security reasons.
+            <div class="info-box">
+                <p><strong>Expires in 30 minutes</strong></p>
             </div>
 
             <p class="message">
-                Simply enter this code in the app to verify your email address and 
-                unlock all the amazing features we have prepared for you.
+                Enter this code in the application to verify your email address and complete your registration.
             </p>
 
-            <div class="warning">
-                <strong>⚠️ Didn't create an account?</strong><br>
-                If you didn't sign up for an account, you can safely ignore this email. 
-                Your email address will not be used without verification.
-            </div>
+            <div class="divider"></div>
 
-            <p class="message" style="margin-top: 30px;">
-                Need help? Our support team is here for you 24/7. Just reply to this email.
+            <p class="message" style="font-size: 14px; color: #666666;">
+                If you didn't create an account with KakebeShop, please ignore this email.
             </p>
         """
 
         plain_text = f"""Hello {user_name},
 
-Welcome aboard! We're excited to have you join our community.
+Welcome to KakebeShop. Please verify your email address to activate your account.
 
-To get started and secure your account, please verify your email address.
+VERIFICATION CODE: {verification_code}
 
-YOUR VERIFICATION CODE: {verification_code}
+This code expires in 30 minutes.
 
-⏰ IMPORTANT: This code will expire in 30 minutes for security reasons.
+Enter this code in the application to verify your email address and complete your registration.
 
-Simply enter this code in the app to verify your email address and unlock all the amazing features we have prepared for you.
+If you didn't create an account with KakebeShop, please ignore this email.
 
-⚠️ DIDN'T CREATE AN ACCOUNT?
-If you didn't sign up for an account, you can safely ignore this email. Your email address will not be used without verification.
-
-Need help? Our support team is here for you 24/7. Just reply to this email.
-
-Best regards,
-The AEACBIO Team
-
-© {cls._get_year()} AEACBIO. All rights reserved."""
+—
+KakebeShop
+Online Marketplace
+© {cls._get_year()} KakebeShop. All rights reserved."""
 
         return {
-            'subject': '🔐 Verify Your Email Address',
-            'html': cls._wrap_html_content(content, 'Verify Your Email Address'),
+            'subject': 'Verify Your Email – KakebeShop',
+            'html': cls._wrap_html_content(content, 'Verify Your Email'),
             'plain': plain_text
         }
 
@@ -239,50 +231,48 @@ The AEACBIO Team
         content = f"""
             <p class="greeting">Hello {user_name},</p>
             <p class="message">
-                You requested a new verification code. Here it is! 
+                Here is your new verification code for KakebeShop.
             </p>
 
             <div class="code-container">
-                <div class="code-label">Your New Verification Code</div>
+                <div class="code-label">Verification Code</div>
                 <div class="code">{verification_code}</div>
             </div>
 
-            <div class="expiry">
-                <span class="expiry-icon">⏰</span>
-                <strong>Expires in:</strong> 30 minutes
+            <div class="info-box">
+                <p><strong>Expires in 30 minutes</strong></p>
             </div>
 
             <p class="message">
-                Enter this code in the app to complete your email verification.
+                Enter this code in the application to verify your email address.
             </p>
 
-            <div class="warning">
-                <strong>⚠️ Security Note:</strong><br>
-                If you didn't request this code, please secure your account immediately 
-                by contacting our support team.
-            </div>
+            <div class="divider"></div>
+
+            <p class="message" style="font-size: 14px; color: #666666;">
+                If you didn't request this code, please secure your account immediately.
+            </p>
         """
 
         plain_text = f"""Hello {user_name},
 
-You requested a new verification code. Here it is!
+Here is your new verification code for KakebeShop.
 
-YOUR NEW VERIFICATION CODE: {verification_code}
+VERIFICATION CODE: {verification_code}
 
-⏰ Expires in: 30 minutes
+This code expires in 30 minutes.
 
-Enter this code in the app to complete your email verification.
+Enter this code in the application to verify your email address.
 
-⚠️ SECURITY NOTE:
-If you didn't request this code, please secure your account immediately by contacting our support team.
+If you didn't request this code, please secure your account immediately.
 
-Best regards,
-The AEACBIO Team
-
-© {cls._get_year()} AEACBIO. All rights reserved."""
+—
+KakebeShop
+Online Marketplace
+© {cls._get_year()} KakebeShop. All rights reserved."""
 
         return {
-            'subject': '🔐 New Verification Code',
+            'subject': 'New Verification Code – KakebeShop',
             'html': cls._wrap_html_content(content, 'New Verification Code'),
             'plain': plain_text
         }
@@ -294,65 +284,48 @@ The AEACBIO Team
         content = f"""
             <p class="greeting">Hello {user_name},</p>
             <p class="message">
-                We received a request to reset your password. No worries, we've got you covered! 
+                We received a request to reset your password for your KakebeShop account.
             </p>
 
             <div class="code-container">
-                <div class="code-label">Your Password Reset Code</div>
+                <div class="code-label">Reset Code</div>
                 <div class="code">{reset_code}</div>
             </div>
 
-            <div class="expiry">
-                <span class="expiry-icon">⏰</span>
-                <strong>Act quickly!</strong> This code will expire in 15 minutes for your security.
+            <div class="info-box">
+                <p><strong>Expires in 15 minutes</strong></p>
             </div>
 
             <p class="message">
-                Enter this code in the app to proceed with resetting your password. 
-                After verification, you'll be able to create a new, secure password.
+                Enter this code in the application to proceed with resetting your password.
             </p>
 
-            <div class="warning">
-                <strong>⚠️ Didn't request a password reset?</strong><br>
-                If you didn't request this, please ignore this email. Your password will remain unchanged. 
-                Consider enabling two-factor authentication for added security.
+            <div class="warning-box">
+                <p><strong>Security Notice</strong></p>
+                <p style="margin-top: 8px;">If you didn't request a password reset, please ignore this email. Your password will remain unchanged.</p>
             </div>
-
-            <p class="message" style="margin-top: 30px; font-size: 14px; color: #666;">
-                <strong>Security Tips:</strong><br>
-                • Never share your reset code with anyone<br>
-                • Our team will never ask for your password or reset code<br>
-                • Use a strong, unique password for your account
-            </p>
         """
 
         plain_text = f"""Hello {user_name},
 
-We received a request to reset your password. No worries, we've got you covered!
+We received a request to reset your password for your KakebeShop account.
 
-YOUR PASSWORD RESET CODE: {reset_code}
+RESET CODE: {reset_code}
 
-⏰ ACT QUICKLY! This code will expire in 15 minutes for your security.
+This code expires in 15 minutes.
 
-Enter this code in the app to proceed with resetting your password. After verification, you'll be able to create a new, secure password.
+Enter this code in the application to proceed with resetting your password.
 
-⚠️ DIDN'T REQUEST A PASSWORD RESET?
-If you didn't request this, please ignore this email. Your password will remain unchanged. Consider enabling two-factor authentication for added security.
+SECURITY NOTICE:
+If you didn't request a password reset, please ignore this email. Your password will remain unchanged.
 
-SECURITY TIPS:
-• Never share your reset code with anyone
-• Our team will never ask for your password or reset code
-• Use a strong, unique password for your account
-
-Need help? Contact our support team immediately.
-
-Best regards,
-The AEACBIO Team
-
-© {cls._get_year()} AEACBIO. All rights reserved."""
+—
+KakebeShop
+Online Marketplace
+© {cls._get_year()} KakebeShop. All rights reserved."""
 
         return {
-            'subject': '🔒 Password Reset Request',
+            'subject': 'Password Reset Request – KakebeShop',
             'html': cls._wrap_html_content(content, 'Password Reset Request'),
             'plain': plain_text
         }
@@ -364,52 +337,52 @@ The AEACBIO Team
         content = f"""
             <p class="greeting">Hello {user_name},</p>
             <p class="message">
-                ✅ <strong>Success!</strong> Your password has been successfully reset.
+                Your password has been successfully reset.
             </p>
 
-            <p class="message">
-                You can now log in to your account using your new password. 
-                Make sure to keep it secure and don't share it with anyone.
-            </p>
-
-            <div class="warning">
-                <strong>⚠️ Didn't reset your password?</strong><br>
-                If you didn't make this change, your account may be compromised. 
-                Please contact our support team immediately at support@aeacbio.com
+            <div class="info-box">
+                <p>You can now log in to your KakebeShop account using your new password.</p>
             </div>
 
-            <p class="message" style="margin-top: 30px;">
-                <strong>Security Recommendations:</strong><br>
-                • Enable two-factor authentication<br>
-                • Use a unique password for this account<br>
-                • Review your recent account activity<br>
-                • Update your password regularly
+            <div class="divider"></div>
+
+            <p class="message">
+                <strong>Recommended Actions:</strong>
             </p>
+            <p class="message" style="font-size: 14px;">
+                • Review your recent account activity<br>
+                • Enable two-factor authentication<br>
+                • Use a unique password for this account
+            </p>
+
+            <div class="warning-box">
+                <p><strong>Didn't change your password?</strong></p>
+                <p style="margin-top: 8px;">If you didn't make this change, please contact our support team immediately to secure your account.</p>
+            </div>
         """
 
         plain_text = f"""Hello {user_name},
 
-✅ SUCCESS! Your password has been successfully reset.
+Your password has been successfully reset.
 
-You can now log in to your account using your new password. Make sure to keep it secure and don't share it with anyone.
+You can now log in to your KakebeShop account using your new password.
 
-⚠️ DIDN'T RESET YOUR PASSWORD?
-If you didn't make this change, your account may be compromised. Please contact our support team immediately at support@aeacbio.com
-
-SECURITY RECOMMENDATIONS:
+RECOMMENDED ACTIONS:
+• Review your recent account activity
 • Enable two-factor authentication
 • Use a unique password for this account
-• Review your recent account activity
-• Update your password regularly
 
-Best regards,
-The AEACBIO Team
+DIDN'T CHANGE YOUR PASSWORD?
+If you didn't make this change, please contact our support team immediately to secure your account.
 
-© {cls._get_year()} AEACBIO. All rights reserved."""
+—
+KakebeShop
+Online Marketplace
+© {cls._get_year()} KakebeShop. All rights reserved."""
 
         return {
-            'subject': '✅ Password Successfully Reset',
-            'html': cls._wrap_html_content(content, 'Password Successfully Reset'),
+            'subject': 'Password Reset Successful – KakebeShop',
+            'html': cls._wrap_html_content(content, 'Password Reset Successful'),
             'plain': plain_text
         }
 
@@ -420,62 +393,56 @@ The AEACBIO Team
         content = f"""
             <p class="greeting">Hello {user_name},</p>
             <p class="message">
-                🎉 <strong>Congratulations!</strong> Your email has been verified successfully. 
-                Welcome to AEACBIO!
+                Your email has been verified successfully. Welcome to KakebeShop.
             </p>
 
-            <p class="message">
-                Your account (<strong>@{username}</strong>) is now fully activated and ready to use. 
-                You have access to all our amazing features.
-            </p>
-
-            <div style="background-color: #e7f3ff; padding: 20px; border-radius: 8px; margin: 20px 0;">
-                <p style="margin: 0; font-size: 16px; color: #0066cc;">
-                    <strong>🚀 Getting Started:</strong>
-                </p>
-                <ul style="margin: 10px 0; color: #333;">
-                    <li>Complete your profile</li>
-                    <li>Explore the dashboard</li>
-                    <li>Connect with the community</li>
-                    <li>Set up two-factor authentication (recommended)</li>
-                </ul>
+            <div class="info-box">
+                <p><strong>Username:</strong> @{username}</p>
+                <p style="margin-top: 6px;">Your account is now fully activated.</p>
             </div>
 
+            <div class="divider"></div>
+
             <p class="message">
-                Need help getting started? Check out our 
-                <a href="#" style="color: #667eea; text-decoration: none;">Quick Start Guide</a> 
-                or reach out to our support team anytime.
+                <strong>Getting Started:</strong>
+            </p>
+            <p class="message" style="font-size: 14px;">
+                • Browse products from verified sellers<br>
+                • Create your first listing<br>
+                • Connect with the community<br>
+                • Complete your profile
             </p>
 
-            <p class="message" style="margin-top: 30px;">
-                Thank you for choosing AEACBIO. We're here to support you every step of the way!
+            <div class="divider"></div>
+
+            <p class="message" style="font-size: 14px; color: #666666;">
+                Thank you for choosing KakebeShop. We're here to support you.
             </p>
         """
 
         plain_text = f"""Hello {user_name},
 
-🎉 CONGRATULATIONS! Your email has been verified successfully. Welcome to AEACBIO!
+Your email has been verified successfully. Welcome to KakebeShop.
 
-Your account (@{username}) is now fully activated and ready to use. You have access to all our amazing features.
+USERNAME: @{username}
+Your account is now fully activated.
 
-🚀 GETTING STARTED:
-• Complete your profile
-• Explore the dashboard
+GETTING STARTED:
+• Browse products from verified sellers
+• Create your first listing
 • Connect with the community
-• Set up two-factor authentication (recommended)
+• Complete your profile
 
-Need help getting started? Check out our Quick Start Guide or reach out to our support team anytime.
+Thank you for choosing KakebeShop. We're here to support you.
 
-Thank you for choosing AEACBIO. We're here to support you every step of the way!
-
-Best regards,
-The AEACBIO Team
-
-© {cls._get_year()} AEACBIO. All rights reserved."""
+—
+KakebeShop
+Online Marketplace
+© {cls._get_year()} KakebeShop. All rights reserved."""
 
         return {
-            'subject': '🎉 Welcome to AEACBIO - Email Verified!',
-            'html': cls._wrap_html_content(content, 'Welcome to AEACBIO'),
+            'subject': 'Welcome to KakebeShop',
+            'html': cls._wrap_html_content(content, 'Welcome to KakebeShop'),
             'plain': plain_text
         }
 
@@ -484,7 +451,7 @@ The AEACBIO Team
         """Wrap content in base HTML template"""
         from datetime import datetime
 
-        company_name = getattr(settings, 'COMPANY_NAME', 'AEACBIO')
+        company_name = getattr(settings, 'COMPANY_NAME', 'KakebeShop')
 
         return cls.get_base_html_template().format(
             subject=subject,
