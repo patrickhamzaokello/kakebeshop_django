@@ -8,7 +8,7 @@ from .views import (
     FavoriteViewSet, SavedSearchViewSet, ConversationViewSet,
     MessageViewSet, NotificationViewSet, ListingReviewViewSet,
     MerchantReviewViewSet, ReportViewSet, MerchantScoreViewSet,
-    ActivityLogViewSet, AuditLogViewSet, ApiUsageViewSet, UserIntentViewSet, OnboardingStatusViewSet
+    ActivityLogViewSet, AuditLogViewSet, ApiUsageViewSet, UserIntentViewSet, OnboardingStatusViewSet, PushTokenViewSet
 )
 
 router = DefaultRouter()
@@ -26,6 +26,9 @@ router.register(r'api-usage', ApiUsageViewSet,basename='api-usage')
 
 router.register(r'user-intent', UserIntentViewSet, basename='user-intent')
 router.register(r'onboarding-status', OnboardingStatusViewSet, basename='onboarding-status')
+
+router.register(r'push-tokens', PushTokenViewSet, basename='push-token')
+
 
 
 # Nested messages under conversations
