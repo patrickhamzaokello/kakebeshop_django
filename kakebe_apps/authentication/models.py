@@ -82,6 +82,15 @@ class User(AbstractBaseUser, PermissionsMixin):
     def __str__(self):
         return str(self.email)
 
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=['email'],
+                name='unique_email',
+                violation_error_message='This email is already registered'
+            )
+        ]
+
     def tokens(self):
         refresh = RefreshToken.for_user(self)
         return {
