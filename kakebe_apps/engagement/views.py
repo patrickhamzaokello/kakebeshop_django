@@ -11,13 +11,13 @@ from django.db import models
 from .models import (
     Favorite, SavedSearch, Conversation, Message, Notification,
     ListingReview, MerchantReview, Report, MerchantScore,
-    ActivityLog, AuditLog, ApiUsage
+    ActivityLog, AuditLog, ApiUsage, OnboardingStatus, UserIntent
 )
 from .serializers import (
     FavoriteSerializer, SavedSearchSerializer, ConversationSerializer,
     MessageSerializer, NotificationSerializer, ListingReviewSerializer,
     MerchantReviewSerializer, ReportSerializer, MerchantScoreSerializer,
-    ActivityLogSerializer, AuditLogSerializer, ApiUsageSerializer
+    ActivityLogSerializer, AuditLogSerializer, ApiUsageSerializer, OnboardingStatusSerializer, UserIntentSerializer
 )
 from ..listings.models import Listing
 
@@ -155,3 +155,149 @@ class ApiUsageViewSet(viewsets.ReadOnlyModelViewSet):
     queryset = ApiUsage.objects.all()
     serializer_class = ApiUsageSerializer
     permission_classes = [IsAdminUser]
+
+
+class UserIntentViewSet(viewsets.ModelViewSet):
+    """
+    ViewSet for managing user intent
+
+    list: Get user's current intent
+    create: Set or update user's intent
+    retrieve: Get user's intent by ID
+    update: Update user's intent
+    destroy: Delete user's intent
+    """
+
+    serializer_class = UserIntentSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        """Return only the current user's intent"""
+        return UserIntent.objects.filter(user=self.request.user)
+
+    def list(self, request, *args, **kwargs):
+        """Get current user's intent"""
+        try:
+            intent = UserIntent.objects.get(user=request.user)
+            serializer = self.get_serializer(intent)
+            return Response({
+                'success': True,
+                'intent': serializer.data
+            }, status=status.HTTP_200_OK)
+        except UserIntent.DoesNotExist:
+            return Response({
+                'success': False,
+                'message': 'No intent set for this user',
+                'intent': None
+            }, status=status.HTTP_404_NOT_FOUND)
+
+    def create(self, request, *args, **kwargs):
+        """Create or update user's intent"""
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        intent = serializer.save()
+
+        return Response({
+            'success': True,
+            'message': 'Intent saved successfully',
+            'intent': serializer.data
+        }, status=status.HTTP_201_CREATED)
+
+    def update(self, request, *args, **kwargs):
+        """Update user's intent"""
+        partial = kwargs.pop('partial', False)
+        instance = self.get_object()
+        serializer = self.get_serializer(instance, data=request.data, partial=partial)
+        serializer.is_valid(raise_exception=True)
+        self.perform_update(serializer)
+
+        return Response({
+            'success': True,
+            'message': 'Intent updated successfully',
+            'intent': serializer.data
+        }, status=status.HTTP_200_OK)
+
+    def destroy(self, request, *args, **kwargs):
+        """Delete user's intent"""
+        instance = self.get_object()
+        self.perform_destroy(instance)
+
+        # Update onboarding status
+        try:
+            onboarding = OnboardingStatus.objects.get(user=request.user)
+            onboarding.intent_completed = False
+            onboarding.check_completion()
+        except OnboardingStatus.DoesNotExist:
+            pass
+
+        return Response({
+            'success': True,
+            'message': 'Intent deleted successfully'
+        }, status=status.HTTP_204_NO_CONTENT)
+
+    @action(detail=False, methods=['get'])
+    def my_intent(self, request):
+        """Get current user's intent - convenient endpoint"""
+        return self.list(request)
+
+
+class OnboardingStatusViewSet(viewsets.ReadOnlyModelViewSet):
+    """
+    ViewSet for viewing onboarding status
+
+    list: Get user's onboarding status
+    retrieve: Get onboarding status by ID
+    """
+
+    serializer_class = OnboardingStatusSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        """Return only the current user's onboarding status"""
+        return OnboardingStatus.objects.filter(user=self.request.user)
+
+    def list(self, request, *args, **kwargs):
+        """Get current user's onboarding status"""
+        onboarding, created = OnboardingStatus.objects.get_or_create(
+            user=request.user
+        )
+        serializer = self.get_serializer(onboarding)
+        return Response({
+            'success': True,
+            'onboarding_status': serializer.data
+        }, status=status.HTTP_200_OK)
+
+    @action(detail=False, methods=['post'])
+    def complete_step(self, request):
+        """Mark a specific onboarding step as complete"""
+        step = request.data.get('step')
+        valid_steps = ['intent', 'categories', 'profile']
+
+        if step not in valid_steps:
+            return Response({
+                'success': False,
+                'message': f'Invalid step. Must be one of: {", ".join(valid_steps)}'
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+        onboarding, _ = OnboardingStatus.objects.get_or_create(user=request.user)
+
+        if step == 'intent':
+            onboarding.intent_completed = True
+        elif step == 'categories':
+            onboarding.categories_completed = True
+        elif step == 'profile':
+            onboarding.profile_completed = True
+
+        onboarding.check_completion()
+
+        serializer = self.get_serializer(onboarding)
+        return Response({
+            'success': True,
+            'message': f'{step.capitalize()} step completed',
+            'onboarding_status': serializer.data
+        }, status=status.HTTP_200_OK)
+
+    @action(detail=False, methods=['get'])
+    def my_status(self, request):
+        """Get current user's onboarding status - convenient endpoint"""
+        return self.list(request)

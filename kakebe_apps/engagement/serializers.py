@@ -12,6 +12,9 @@ from kakebe_apps.listings.models import Listing
 from kakebe_apps.merchants.models import Merchant
 from kakebe_apps.orders.models import OrderIntent
 
+from .models import UserIntent, OnboardingStatus
+from ..authentication.models import User
+
 
 class FavoriteSerializer(serializers.ModelSerializer):
     listing_title = serializers.CharField(source='listing.title', read_only=True)
@@ -172,3 +175,117 @@ class ApiUsageSerializer(serializers.ModelSerializer):
 
     def update(self, instance, validated_data):
         raise serializers.ValidationError("This is a read-only endpoint")
+
+
+class UserIntentSerializer(serializers.ModelSerializer):
+    """Serializer for UserIntent model"""
+
+    user_email = serializers.EmailField(source='user.email', read_only=True)
+    user_name = serializers.CharField(source='user.name', read_only=True)
+    intent_display = serializers.CharField(source='get_intent_display', read_only=True)
+
+    class Meta:
+        model = UserIntent
+        fields = [
+            'id',
+            'user_email',
+            'user_name',
+            'intent',
+            'intent_display',
+            'created_at',
+            'updated_at'
+        ]
+        read_only_fields = ['id', 'user_email', 'user_name', 'created_at', 'updated_at']
+
+    def validate_intent(self, value):
+        """Validate intent value"""
+        valid_intents = ['buy', 'sell', 'both']
+        if value not in valid_intents:
+            raise serializers.ValidationError(
+                f"Invalid intent. Must be one of: {', '.join(valid_intents)}"
+            )
+        return value
+
+    def create(self, validated_data):
+        """Create or update user intent"""
+        user = self.context['request'].user
+        intent_obj, created = UserIntent.objects.update_or_create(
+            user=user,
+            defaults={'intent': validated_data['intent']}
+        )
+
+        # Update onboarding status
+        onboarding, _ = OnboardingStatus.objects.get_or_create(user=user)
+        onboarding.intent_completed = True
+        onboarding.check_completion()
+
+        return intent_obj
+
+
+class OnboardingStatusSerializer(serializers.ModelSerializer):
+    """Serializer for OnboardingStatus model"""
+
+    user_email = serializers.EmailField(source='user.email', read_only=True)
+    user_name = serializers.CharField(source='user.name', read_only=True)
+    progress_percentage = serializers.SerializerMethodField()
+
+    class Meta:
+        model = OnboardingStatus
+        fields = [
+            'id',
+            'user_email',
+            'user_name',
+            'intent_completed',
+            'categories_completed',
+            'profile_completed',
+            'is_onboarding_complete',
+            'progress_percentage',
+            'completed_at',
+            'created_at',
+            'updated_at'
+        ]
+        read_only_fields = [
+            'id',
+            'user_email',
+            'user_name',
+            'is_onboarding_complete',
+            'completed_at',
+            'created_at',
+            'updated_at'
+        ]
+
+    def get_progress_percentage(self, obj):
+        """Calculate onboarding progress percentage"""
+        completed_steps = sum([
+            obj.intent_completed,
+            obj.categories_completed,
+            obj.profile_completed,
+        ])
+        total_steps = 3
+        return round((completed_steps / total_steps) * 100, 2)
+
+
+class UserProfileSerializer(serializers.ModelSerializer):
+    """Extended user serializer with intent and onboarding status"""
+
+    intent = UserIntentSerializer(source='marketplace_intent', read_only=True)
+    onboarding = OnboardingStatusSerializer(source='onboarding_status', read_only=True)
+
+    class Meta:
+        model = User
+        fields = [
+            'id',
+            'username',
+            'name',
+            'email',
+            'profile_image',
+            'phone',
+            'bio',
+            'is_verified',
+            'phone_verified',
+            'intent',
+            'onboarding',
+            'created_at',
+            'updated_at'
+        ]
+        read_only_fields = ['id', 'email', 'username', 'created_at', 'updated_at']

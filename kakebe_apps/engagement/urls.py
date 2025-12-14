@@ -8,7 +8,7 @@ from .views import (
     FavoriteViewSet, SavedSearchViewSet, ConversationViewSet,
     MessageViewSet, NotificationViewSet, ListingReviewViewSet,
     MerchantReviewViewSet, ReportViewSet, MerchantScoreViewSet,
-    ActivityLogViewSet, AuditLogViewSet, ApiUsageViewSet
+    ActivityLogViewSet, AuditLogViewSet, ApiUsageViewSet, UserIntentViewSet, OnboardingStatusViewSet
 )
 
 router = DefaultRouter()
@@ -23,6 +23,10 @@ router.register(r'merchant-scores', MerchantScoreViewSet,basename='merchant-scor
 router.register(r'activity-logs', ActivityLogViewSet,basename='activity-log')
 router.register(r'audit-logs', AuditLogViewSet,basename='audit-log')
 router.register(r'api-usage', ApiUsageViewSet,basename='api-usage')
+
+router.register(r'user-intent', UserIntentViewSet, basename='user-intent')
+router.register(r'onboarding-status', OnboardingStatusViewSet, basename='onboarding-status')
+
 
 # Nested messages under conversations
 conversations_router = NestedDefaultRouter(router, r'conversations', lookup='conversation')

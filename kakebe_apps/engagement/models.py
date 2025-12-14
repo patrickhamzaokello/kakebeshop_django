@@ -1,5 +1,6 @@
 import uuid
 
+from django.core.exceptions import ValidationError
 from django.core.validators import MinValueValidator, MaxValueValidator
 from django.db import models
 
@@ -423,3 +424,94 @@ class ActivityLog(models.Model):
         return f"{self.activity_type} - {self.created_at}"
 
 
+class UserIntent(models.Model):
+    """Model to store user's marketplace intent (buy, sell, or both)"""
+
+    INTENT_CHOICES = [
+        ('buy', 'Buy'),
+        ('sell', 'Sell'),
+        ('both', 'Both'),
+    ]
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    user = models.OneToOneField(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name='marketplace_intent',
+        help_text="User associated with this intent"
+    )
+    intent = models.CharField(
+        max_length=10,
+        choices=INTENT_CHOICES,
+        help_text="User's marketplace intent"
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = 'user_intents'
+        verbose_name = 'User Intent'
+        verbose_name_plural = 'User Intents'
+        ordering = ['-updated_at']
+        indexes = [
+            models.Index(fields=['intent']),
+            models.Index(fields=['-updated_at']),
+        ]
+
+    def __str__(self):
+        return f"{self.user.email} - {self.get_intent_display()}"
+
+    def clean(self):
+        """Validate intent value"""
+        if self.intent not in dict(self.INTENT_CHOICES):
+            raise ValidationError({
+                'intent': 'Invalid intent value. Must be buy, sell, or both.'
+            })
+
+
+class OnboardingStatus(models.Model):
+    """Track user's onboarding progress"""
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    user = models.OneToOneField(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name='onboarding_status'
+    )
+    intent_completed = models.BooleanField(default=False)
+    categories_completed = models.BooleanField(default=False)
+    profile_completed = models.BooleanField(default=False)
+    is_onboarding_complete = models.BooleanField(default=False)
+    completed_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = 'onboarding_statuses'
+        verbose_name = 'Onboarding Status'
+        verbose_name_plural = 'Onboarding Statuses'
+        ordering = ['-updated_at']
+        indexes = [
+            models.Index(fields=['is_onboarding_complete']),
+            models.Index(fields=['-updated_at']),
+        ]
+
+    def __str__(self):
+        status = 'Complete' if self.is_onboarding_complete else 'Incomplete'
+        return f"{self.user.email} - {status}"
+
+    def check_completion(self):
+        """Check if all onboarding steps are complete"""
+        from django.utils import timezone
+
+        # Check if intent is completed (minimum requirement)
+        # You can add more conditions based on your requirements
+        if self.intent_completed and not self.is_onboarding_complete:
+            self.is_onboarding_complete = True
+            self.completed_at = timezone.now()
+            self.save()
+        elif not self.intent_completed and self.is_onboarding_complete:
+            # If intent is uncompleted, mark onboarding as incomplete
+            self.is_onboarding_complete = False
+            self.completed_at = None
+            self.save()

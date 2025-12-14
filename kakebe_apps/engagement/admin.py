@@ -10,7 +10,7 @@ from .models import (
     Favorite, SavedSearch, Conversation, Message, Notification,
     ListingReview, MerchantReview, MerchantScore, Report,
     FollowUpRule, FollowUpLog, AdminUser, AuditLog,
-    ApiUsage, ActivityLog
+    ApiUsage, ActivityLog, OnboardingStatus, UserIntent
 )
 
 
@@ -993,3 +993,329 @@ class ActivityLogAdmin(admin.ModelAdmin):
         return "No metadata"
 
     formatted_metadata.short_description = "Metadata (JSON)"
+
+
+@admin.register(UserIntent)
+class UserIntentAdmin(admin.ModelAdmin):
+    """Admin interface for UserIntent model"""
+
+    list_display = [
+        'user_email',
+        'user_name',
+        'intent_badge',
+        'created_at',
+        'updated_at'
+    ]
+    list_filter = ['intent', 'created_at', 'updated_at']
+    search_fields = [
+        'user__email',
+        'user__name',
+        'user__username'
+    ]
+    readonly_fields = [
+        'id',
+        'created_at',
+        'updated_at',
+        'user_details'
+    ]
+    ordering = ['-updated_at']
+    date_hierarchy = 'created_at'
+
+    fieldsets = (
+        ('User Information', {
+            'fields': ('user', 'user_details')
+        }),
+        ('Intent Details', {
+            'fields': ('intent',)
+        }),
+        ('Timestamps', {
+            'fields': ('id', 'created_at', 'updated_at'),
+            'classes': ('collapse',)
+        }),
+    )
+
+    def user_email(self, obj):
+        """Display user email"""
+        return obj.user.email
+
+    user_email.short_description = 'Email'
+    user_email.admin_order_field = 'user__email'
+
+    def user_name(self, obj):
+        """Display user name"""
+        return obj.user.name
+
+    user_name.short_description = 'Name'
+    user_name.admin_order_field = 'user__name'
+
+    def intent_badge(self, obj):
+        """Display intent as a colored badge"""
+        colors = {
+            'buy': '#3B82F6',  # Blue
+            'sell': '#10B981',  # Green
+            'both': '#8B5CF6',  # Purple
+        }
+        color = colors.get(obj.intent, '#6B7280')
+        return format_html(
+            '<span style="background-color: {}; color: white; padding: 3px 10px; '
+            'border-radius: 12px; font-weight: bold; font-size: 11px;">{}</span>',
+            color,
+            obj.get_intent_display().upper()
+        )
+
+    intent_badge.short_description = 'Intent'
+    intent_badge.admin_order_field = 'intent'
+
+    def user_details(self, obj):
+        """Display detailed user information"""
+        return format_html(
+            '<strong>Email:</strong> {}<br>'
+            '<strong>Name:</strong> {}<br>'
+            '<strong>Username:</strong> {}<br>'
+            '<strong>Phone:</strong> {}<br>'
+            '<strong>Verified:</strong> {}',
+            obj.user.email,
+            obj.user.name,
+            obj.user.username,
+            obj.user.phone or 'N/A',
+            '✅ Yes' if obj.user.is_verified else '❌ No'
+        )
+
+    user_details.short_description = 'User Details'
+
+    def has_add_permission(self, request):
+        """Prevent manual addition through admin (should be done through API)"""
+        return True
+
+    def get_queryset(self, request):
+        """Optimize queryset with select_related"""
+        qs = super().get_queryset(request)
+        return qs.select_related('user')
+
+
+@admin.register(OnboardingStatus)
+class OnboardingStatusAdmin(admin.ModelAdmin):
+    """Admin interface for OnboardingStatus model"""
+
+    list_display = [
+        'user_email',
+        'user_name',
+        'progress_bar',
+        'intent_status',
+        'categories_status',
+        'profile_status',
+        'completion_status',
+        'updated_at'
+    ]
+    list_filter = [
+        'intent_completed',
+        'categories_completed',
+        'profile_completed',
+        'is_onboarding_complete',
+        'created_at',
+        'updated_at'
+    ]
+    search_fields = [
+        'user__email',
+        'user__name',
+        'user__username'
+    ]
+    readonly_fields = [
+        'id',
+        'is_onboarding_complete',
+        'completed_at',
+        'created_at',
+        'updated_at',
+        'user_details',
+        'progress_details'
+    ]
+    ordering = ['-updated_at']
+    date_hierarchy = 'created_at'
+
+    fieldsets = (
+        ('User Information', {
+            'fields': ('user', 'user_details')
+        }),
+        ('Onboarding Steps', {
+            'fields': (
+                'intent_completed',
+                'categories_completed',
+                'profile_completed',
+            )
+        }),
+        ('Progress', {
+            'fields': ('progress_details',)
+        }),
+        ('Completion Status', {
+            'fields': (
+                'is_onboarding_complete',
+                'completed_at'
+            ),
+            'classes': ('collapse',)
+        }),
+        ('Timestamps', {
+            'fields': ('id', 'created_at', 'updated_at'),
+            'classes': ('collapse',)
+        }),
+    )
+
+    def user_email(self, obj):
+        """Display user email"""
+        return obj.user.email
+
+    user_email.short_description = 'Email'
+    user_email.admin_order_field = 'user__email'
+
+    def user_name(self, obj):
+        """Display user name"""
+        return obj.user.name
+
+    user_name.short_description = 'Name'
+    user_name.admin_order_field = 'user__name'
+
+    def intent_status(self, obj):
+        """Display intent completion status"""
+        return self._status_icon(obj.intent_completed)
+
+    intent_status.short_description = 'Intent'
+
+    def categories_status(self, obj):
+        """Display categories completion status"""
+        return self._status_icon(obj.categories_completed)
+
+    categories_status.short_description = 'Categories'
+
+    def profile_status(self, obj):
+        """Display profile completion status"""
+        return self._status_icon(obj.profile_completed)
+
+    profile_status.short_description = 'Profile'
+
+    def completion_status(self, obj):
+        """Display overall completion status"""
+        if obj.is_onboarding_complete:
+            return format_html(
+                '<span style="color: #10B981; font-weight: bold;">✅ Complete</span>'
+            )
+        return format_html(
+            '<span style="color: #EF4444; font-weight: bold;">⏳ In Progress</span>'
+        )
+
+    completion_status.short_description = 'Status'
+    completion_status.admin_order_field = 'is_onboarding_complete'
+
+    def progress_bar(self, obj):
+        """Display visual progress bar"""
+        completed = sum([
+            obj.intent_completed,
+            obj.categories_completed,
+            obj.profile_completed,
+        ])
+        total = 3
+        percentage = (completed / total) * 100
+
+        color = '#10B981' if percentage == 100 else '#3B82F6'
+
+        return format_html(
+            '<div style="width: 100px; background-color: #E5E7EB; '
+            'border-radius: 10px; overflow: hidden;">'
+            '<div style="width: {}%; background-color: {}; height: 20px; '
+            'text-align: center; color: white; font-size: 11px; font-weight: bold; '
+            'line-height: 20px;">{:.0f}%</div>'
+            '</div>',
+            percentage,
+            color,
+            percentage
+        )
+
+    progress_bar.short_description = 'Progress'
+
+    def progress_details(self, obj):
+        """Display detailed progress information"""
+        completed = sum([
+            obj.intent_completed,
+            obj.categories_completed,
+            obj.profile_completed,
+        ])
+        total = 3
+        percentage = (completed / total) * 100
+
+        return format_html(
+            '<div style="background: #F3F4F6; padding: 15px; border-radius: 8px;">'
+            '<h3 style="margin-top: 0;">Onboarding Progress</h3>'
+            '<p><strong>Completed Steps:</strong> {} / {}</p>'
+            '<p><strong>Progress:</strong> {:.1f}%</p>'
+            '<hr>'
+            '<p>{} Intent Selection</p>'
+            '<p>{} Category Selection</p>'
+            '<p>{} Profile Completion</p>'
+            '</div>',
+            completed,
+            total,
+            percentage,
+            '✅' if obj.intent_completed else '⏳',
+            '✅' if obj.categories_completed else '⏳',
+            '✅' if obj.profile_completed else '⏳',
+        )
+
+    progress_details.short_description = 'Progress Details'
+
+    def user_details(self, obj):
+        """Display detailed user information"""
+        return format_html(
+            '<strong>Email:</strong> {}<br>'
+            '<strong>Name:</strong> {}<br>'
+            '<strong>Username:</strong> {}<br>'
+            '<strong>Verified:</strong> {}',
+            obj.user.email,
+            obj.user.name,
+            obj.user.username,
+            '✅ Yes' if obj.user.is_verified else '❌ No'
+        )
+
+    user_details.short_description = 'User Details'
+
+    @staticmethod
+    def _status_icon(completed):
+        """Helper method to display status icon"""
+        if completed:
+            return format_html(
+                '<span style="color: #10B981; font-size: 16px;">✅</span>'
+            )
+        return format_html(
+            '<span style="color: #6B7280; font-size: 16px;">⏳</span>'
+        )
+
+    def get_queryset(self, request):
+        """Optimize queryset with select_related"""
+        qs = super().get_queryset(request)
+        return qs.select_related('user')
+
+    actions = ['mark_intent_complete', 'mark_categories_complete', 'mark_profile_complete']
+
+    def mark_intent_complete(self, request, queryset):
+        """Bulk action to mark intent as complete"""
+        for obj in queryset:
+            obj.intent_completed = True
+            obj.check_completion()
+        self.message_user(request, f"{queryset.count()} intent(s) marked as complete")
+
+    mark_intent_complete.short_description = "Mark intent as complete"
+
+    def mark_categories_complete(self, request, queryset):
+        """Bulk action to mark categories as complete"""
+        for obj in queryset:
+            obj.categories_completed = True
+            obj.check_completion()
+        self.message_user(request, f"{queryset.count()} categories marked as complete")
+
+    mark_categories_complete.short_description = "Mark categories as complete"
+
+    def mark_profile_complete(self, request, queryset):
+        """Bulk action to mark profile as complete"""
+        for obj in queryset:
+            obj.profile_completed = True
+            obj.check_completion()
+        self.message_user(request, f"{queryset.count()} profiles marked as complete")
+
+    mark_profile_complete.short_description = "Mark profile as complete"
