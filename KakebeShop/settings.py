@@ -263,6 +263,14 @@ EMAIL_HOST_USER = config('EMAIL_HOST_USER')
 EMAIL_HOST_PASSWORD = config('EMAIL_HOST_PASSWORD')
 EMAIL_PLUNK_API_KEY = config('EMAIL_PLUNK_API_KEY')
 
+EMAIL_SENDER_NAME = 'Kakebeshop'
+EMAIL_REPLY_TO = 'support@kakebeshop.com'
+
+# Company Information (used in email templates)
+COMPANY_NAME = 'KAKEBE SHOP'
+COMPANY_WEBSITE = 'https://kakebeshop.com'
+SUPPORT_EMAIL = 'support@kakebeshop.com'
+
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
@@ -301,6 +309,10 @@ LOGGING = {
             'handlers': ['file', 'console'],
             'level': 'INFO',
             'propagate': True,
+        },
+        'django.core.mail': {
+            'handlers': ['console'],
+            'level': 'DEBUG',
         },
     },
 }

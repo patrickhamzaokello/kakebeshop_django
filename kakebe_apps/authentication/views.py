@@ -3,6 +3,8 @@ from django.shortcuts import render
 from rest_framework import generics, status, views, permissions
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.exceptions import ValidationError
+
+from .email_templates import get_email_template
 from .serializers import (
     RegisterSerializer, SetNewPasswordSerializer, ResetPasswordEmailRequestSerializer,
     EmailVerificationSerializer, LoginSerializer, LogoutSerializer, VerifyResetCodeSerializer,
@@ -45,21 +47,8 @@ class RegisterView(generics.GenericAPIView):
     @swagger_auto_schema(
         operation_description="Register a new user account",
         responses={
-            201: openapi.Response(
-                description="User registered successfully",
-                examples={
-                    "application/json": {
-                        "email": "user@example.com",
-                        "name": "John Doe",
-                        "user_id": "123e4567-e89b-12d3-a456-426614174000",
-                        "username": "johndoe",
-                        "message": "Registration successful. Please check your email for verification code.",
-                        "verification_required": True,
-                        "code_expires_in": "30 minutes"
-                    }
-                }
-            ),
-            400: "Validation error (e.g., email already exists)",
+            201: "User registered successfully",
+            400: "Validation error",
             500: "Internal server error"
         }
     )
@@ -82,33 +71,18 @@ class RegisterView(generics.GenericAPIView):
                 'email': user.email
             }, timeout=1800)  # 30 minutes
 
-            # Prepare email
-            email_body = f'''Hello {user.name},
-
-Welcome to our platform! To complete your registration, please verify your email address.
-
-Your email verification code is: {verification_code}
-
-This code will expire in 30 minutes for security reasons.
-Please enter this code in the app to verify your email address.
-
-If you didn't create this account, please ignore this email.
-
-Best regards,
-AEACBIO TEAM'''
-
-            email_data = {
-                'email_body': email_body,
-                'to_email': user.email,
-                'email_subject': 'Verify Your Email Address'
-            }
+            # Get email template
+            template_data = get_email_template(
+                'email_verification',
+                user_name=user.name,
+                verification_code=verification_code
+            )
 
             # Send email
-            email_sent = Util.send_email(email_data)
+            email_sent = Util.send_templated_email(user.email, template_data)
 
             if not email_sent:
                 logger.error(f"Failed to send verification email to {user.email}")
-                # Don't delete the user, just warn about email failure
                 return Response({
                     'email': user.email,
                     'name': user.name,
@@ -131,7 +105,6 @@ AEACBIO TEAM'''
             }, status=status.HTTP_201_CREATED)
 
         except ValidationError as e:
-            # Handle validation errors (including duplicate email)
             logger.warning(f"Registration validation error: {str(e.detail)}")
             return Response({
                 'error': 'Registration failed',
@@ -146,16 +119,15 @@ AEACBIO TEAM'''
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
+
+
 class VerifyEmailAPIView(views.APIView):
     serializer_class = EmailVerificationSerializer
 
     @swagger_auto_schema(
         operation_description="Verify email with 6-digit code",
         request_body=EmailVerificationSerializer,
-        responses={
-            200: "Email verified successfully",
-            400: "Invalid code or validation error"
-        }
+        responses={200: "Email verified successfully", 400: "Invalid code"}
     )
     def post(self, request):
         try:
@@ -216,6 +188,17 @@ class VerifyEmailAPIView(views.APIView):
 
             # Clear cache
             cache.delete(cache_key)
+
+            # Send welcome email
+            try:
+                welcome_template = get_email_template(
+                    'welcome_verified',
+                    user_name=user.name,
+                    username=user.username
+                )
+                Util.send_templated_email(user.email, welcome_template)
+            except Exception as e:
+                logger.warning(f"Failed to send welcome email: {str(e)}")
 
             # Generate tokens
             refresh = RefreshToken.for_user(user)
@@ -283,24 +266,15 @@ class ResendVerificationCodeAPIView(views.APIView):
                 'email': user.email
             }, timeout=1800)
 
+            # Get email template
+            template_data = get_email_template(
+                'resend_verification',
+                user_name=user.name,
+                verification_code=verification_code
+            )
+
             # Send email
-            email_body = f'''Hello {user.name},
-
-Here is your new email verification code: {verification_code}
-
-This code will expire in 30 minutes for security reasons.
-Please enter this code in the app to verify your email address.
-
-Best regards,
-AEACBIO TEAM'''
-
-            email_data = {
-                'email_body': email_body,
-                'to_email': user.email,
-                'email_subject': 'New Email Verification Code'
-            }
-
-            email_sent = Util.send_email(email_data)
+            email_sent = Util.send_templated_email(user.email, template_data)
 
             if not email_sent:
                 logger.error(f"Failed to resend verification email to {user.email}")
@@ -378,28 +352,15 @@ class RequestPasswordResetEmail(generics.GenericAPIView):
                     'attempts': 0
                 }, timeout=900)  # 15 minutes
 
+                # Get email template
+                template_data = get_email_template(
+                    'password_reset',
+                    user_name=user.name,
+                    reset_code=reset_code
+                )
+
                 # Send email
-                email_body = f'''Hello {user.name},
-
-You requested a password reset for your account.
-
-Your password reset code is: {reset_code}
-
-This code will expire in 15 minutes for security reasons.
-Please enter this code in your app to proceed with password reset.
-
-If you didn't request this reset, please ignore this email.
-
-Best regards,
-AEACBIO TEAM'''
-
-                email_data = {
-                    'email_body': email_body,
-                    'to_email': user.email,
-                    'email_subject': 'Your Password Reset Code'
-                }
-
-                email_sent = Util.send_email(email_data)
+                email_sent = Util.send_templated_email(user.email, template_data)
 
                 if not email_sent:
                     logger.error(f"Failed to send password reset email to {user.email}")
@@ -418,6 +379,7 @@ AEACBIO TEAM'''
                 'error': 'Password reset request failed',
                 'message': 'Please try again later'
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
 
 
 class VerifyResetCodeAPIView(generics.GenericAPIView):
@@ -520,6 +482,16 @@ class SetNewPasswordAPIView(generics.GenericAPIView):
             # Clear session
             reset_session_key = f"reset_session_{user.pk}"
             cache.delete(reset_session_key)
+
+            # Send confirmation email
+            try:
+                confirmation_template = get_email_template(
+                    'password_reset_success',
+                    user_name=user.name
+                )
+                Util.send_templated_email(user.email, confirmation_template)
+            except Exception as e:
+                logger.warning(f"Failed to send password reset confirmation: {str(e)}")
 
             return Response({
                 'success': True,
