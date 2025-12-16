@@ -6,7 +6,6 @@ from rest_framework.test import APITestCase, APIClient
 from rest_framework import status
 from kakebe_apps.merchants.models import Merchant
 from kakebe_apps.categories.models import Category
-from kakebe_apps.location.models import Location
 from .models import Listing, ListingImage
 
 User = get_user_model()
@@ -26,7 +25,6 @@ class ListingModelTestCase(TestCase):
             verified=True
         )
         self.category = Category.objects.create(name='Test Category')
-        self.location = Location.objects.create(name='Test Location')
 
     def test_listing_creation(self):
         listing = Listing.objects.create(
@@ -35,7 +33,6 @@ class ListingModelTestCase(TestCase):
             description='A test product',
             listing_type='PRODUCT',
             category=self.category,
-            location=self.location,
             price_type='FIXED',
             price=100.00
         )
@@ -49,7 +46,6 @@ class ListingModelTestCase(TestCase):
             description='A test product',
             listing_type='PRODUCT',
             category=self.category,
-            location=self.location,
             price_type='FIXED',
             price=100.00,
             status='ACTIVE',
@@ -64,7 +60,6 @@ class ListingModelTestCase(TestCase):
             description='A test product',
             listing_type='PRODUCT',
             category=self.category,
-            location=self.location,
             price_type='FIXED',
             price=100.00
         )
@@ -102,9 +97,8 @@ class ListingAPITestCase(APITestCase):
             verified=True
         )
 
-        # Create category and location
+        # Create category
         self.category = Category.objects.create(name='Electronics')
-        self.location = Location.objects.create(name='Kampala')
 
         # Create verified listing
         self.listing1 = Listing.objects.create(
@@ -113,7 +107,6 @@ class ListingAPITestCase(APITestCase):
             description='A great laptop',
             listing_type='PRODUCT',
             category=self.category,
-            location=self.location,
             price_type='FIXED',
             price=1000.00,
             status='ACTIVE',
@@ -128,7 +121,6 @@ class ListingAPITestCase(APITestCase):
             description='A smartphone',
             listing_type='PRODUCT',
             category=self.category,
-            location=self.location,
             price_type='FIXED',
             price=500.00,
             status='PENDING',
@@ -188,7 +180,6 @@ class ListingAPITestCase(APITestCase):
             'description': 'Description',
             'listing_type': 'PRODUCT',
             'category': self.category.id,
-            'location': self.location.id,
             'price_type': 'FIXED',
             'price': 100.00
         }
@@ -204,7 +195,6 @@ class ListingAPITestCase(APITestCase):
             'description': 'Description',
             'listing_type': 'PRODUCT',
             'category': self.category.id,
-            'location': self.location.id,
             'price_type': 'FIXED',
             'price': 100.00
         }

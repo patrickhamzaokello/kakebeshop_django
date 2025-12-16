@@ -3,17 +3,21 @@
 from rest_framework import serializers
 from django.contrib.auth import get_user_model
 from .models import Merchant
+from kakebe_apps.location.serializers import LocationSerializer
+
 
 User = get_user_model()
 
 
 class MerchantListSerializer(serializers.ModelSerializer):
     """Lightweight serializer for listing merchants"""
+    location_name = serializers.CharField(source='location.name', read_only=True)
+
 
     class Meta:
         model = Merchant
         fields = [
-            'id', 'display_name', 'business_name',
+            'id', 'display_name', 'business_name','location_name',
             'logo', 'rating', 'total_reviews', 'verified', 'featured'
         ]
 
@@ -22,6 +26,7 @@ class MerchantDetailSerializer(serializers.ModelSerializer):
     """Full serializer for detailed merchant view"""
     user_id = serializers.UUIDField(source='user.id', read_only=True)
     username = serializers.CharField(source='user.username', read_only=True)
+    location = LocationSerializer(read_only=True)
     email = serializers.EmailField(source='user.email', read_only=True)
     is_active = serializers.BooleanField(read_only=True)
 
@@ -30,7 +35,7 @@ class MerchantDetailSerializer(serializers.ModelSerializer):
         fields = [
             'id', 'user_id', 'username', 'email',
             'display_name', 'business_name', 'description',
-            'business_phone', 'business_email', 'logo', 'cover_image',
+            'business_phone','location', 'business_email', 'logo', 'cover_image',
             'verified', 'verification_date', 'featured',
             'rating', 'total_reviews', 'status', 'is_active',
             'created_at', 'updated_at'
@@ -49,7 +54,7 @@ class MerchantUpdateSerializer(serializers.ModelSerializer):
     class Meta:
         model = Merchant
         fields = [
-            'display_name', 'business_name', 'description',
+            'display_name', 'business_name', 'description','location',
             'business_phone', 'business_email', 'logo', 'cover_image'
         ]
 
@@ -79,7 +84,7 @@ class MerchantCreateSerializer(serializers.ModelSerializer):
     class Meta:
         model = Merchant
         fields = [
-            'display_name', 'business_name', 'description',
+            'display_name', 'business_name', 'description','location',
             'business_phone', 'business_email', 'logo', 'cover_image'
         ]
 

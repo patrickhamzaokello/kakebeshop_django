@@ -75,6 +75,11 @@ class MerchantViewSet(viewsets.ViewSet):
             except ValueError:
                 pass
 
+        # Filter by location
+        location_id = request.query_params.get('location', None)
+        if location_id:
+            queryset = queryset.filter(location_id=location_id)
+
         # Sorting
         sort_by = request.query_params.get('sort_by', '-rating')
         valid_sort_fields = ['rating', '-rating', 'display_name',

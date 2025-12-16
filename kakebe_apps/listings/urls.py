@@ -16,7 +16,7 @@ urlpatterns = [
 # PUBLIC ENDPOINTS (Verified listings only):
 # GET    /listings/                         - List verified listings (paginated)
 #                                             Query params: search, listing_type, category,
-#                                             location, merchant, min_price, max_price,
+#                                             merchant, min_price, max_price,
 #                                             sort_by, page, page_size
 # GET    /listings/featured/                - Get featured listings (shuffled)
 #                                             Query params: limit (default: 10, max: 50)
@@ -35,7 +35,7 @@ urlpatterns = [
 # POST   /listings/{id}/add_business_hour/  - Add business hours
 #
 # Example API calls:
-# GET /listings/?page=1&page_size=20&category=5&location=2&min_price=100&sort_by=-created_at
+# GET /listings/?page=1&page_size=20&category=5&min_price=100&sort_by=-created_at
 # GET /listings/featured/?limit=5
 # GET /listings/my_listings/?status=PENDING
 # POST /listings/ with JSON body

@@ -45,7 +45,7 @@ class ListingAdmin(admin.ModelAdmin):
         ('Basic Information', {
             'fields': (
                 'id', 'merchant', 'title', 'description',
-                'listing_type', 'category', 'location'
+                'listing_type', 'category'
             )
         }),
         ('Pricing', {

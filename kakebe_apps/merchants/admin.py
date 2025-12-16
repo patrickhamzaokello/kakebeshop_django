@@ -18,7 +18,7 @@ class MerchantAdmin(admin.ModelAdmin):
 
     fieldsets = (
         ('Basic Information', {
-            'fields': ('id', 'user', 'display_name', 'business_name', 'description')
+            'fields': ('id', 'user', 'display_name', 'business_name','location', 'description')
         }),
         ('Contact Information', {
             'fields': ('business_phone', 'business_email')

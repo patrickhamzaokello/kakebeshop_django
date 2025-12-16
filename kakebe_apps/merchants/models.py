@@ -3,6 +3,8 @@ import uuid
 from django.db import models
 from django.conf import settings
 from django.core.validators import MinValueValidator, MaxValueValidator
+from kakebe_apps.location.models import Location
+
 
 
 class Merchant(models.Model):
@@ -25,6 +27,14 @@ class Merchant(models.Model):
     business_email = models.EmailField(null=True, blank=True, unique=True)
     logo = models.URLField(null=True, blank=True)
     cover_image = models.URLField(null=True, blank=True)
+
+    location = models.ForeignKey(
+        Location,
+        on_delete=models.PROTECT,
+        related_name='listings',
+        null=True,  # Add this
+        blank=True
+    )
 
     # Verification fields
     verified = models.BooleanField(default=False, db_index=True)

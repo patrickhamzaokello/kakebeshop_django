@@ -4,7 +4,6 @@ from rest_framework import serializers
 from django.utils import timezone
 from .models import Listing, ListingTag, ListingImage, ListingBusinessHour
 from kakebe_apps.categories.serializers import CategorySerializer, TagSerializer
-from kakebe_apps.location.serializers import LocationSerializer
 from kakebe_apps.merchants.serializers import MerchantListSerializer
 
 
@@ -43,14 +42,13 @@ class ListingListSerializer(serializers.ModelSerializer):
     """Lightweight serializer for listing in lists"""
     merchant = MerchantListSerializer(read_only=True)
     category_name = serializers.CharField(source='category.name', read_only=True)
-    location_name = serializers.CharField(source='location.name', read_only=True)
     primary_image = serializers.SerializerMethodField()
 
     class Meta:
         model = Listing
         fields = [
             'id', 'merchant', 'title', 'listing_type',
-            'category_name', 'location_name', 'price_type',
+            'category_name', 'price_type',
             'price', 'price_min', 'price_max', 'currency',
             'is_featured', 'is_verified', 'views_count',
             'primary_image', 'created_at'
@@ -70,7 +68,6 @@ class ListingDetailSerializer(serializers.ModelSerializer):
     """Full serializer for detailed listing view"""
     merchant = MerchantListSerializer(read_only=True)
     category = CategorySerializer(read_only=True)
-    location = LocationSerializer(read_only=True)
     tags = TagSerializer(many=True, read_only=True)
     images = ListingImageSerializer(many=True, read_only=True)
     business_hours = ListingBusinessHourSerializer(many=True, read_only=True)
@@ -80,7 +77,7 @@ class ListingDetailSerializer(serializers.ModelSerializer):
         model = Listing
         fields = [
             'id', 'merchant', 'title', 'description', 'listing_type',
-            'category', 'location', 'tags', 'price_type', 'price',
+            'category', 'tags', 'price_type', 'price',
             'price_min', 'price_max', 'currency', 'is_price_negotiable',
             'status', 'rejection_reason', 'is_verified', 'verified_at',
             'is_featured', 'featured_until', 'views_count', 'contact_count',
@@ -116,7 +113,7 @@ class ListingCreateSerializer(serializers.ModelSerializer):
         model = Listing
         fields = [
             'title', 'description', 'listing_type', 'category',
-            'location', 'price_type', 'price', 'price_min',
+            'price_type', 'price', 'price_min',
             'price_max', 'currency', 'is_price_negotiable',
             'tag_ids', 'images_data', 'business_hours_data', 'metadata'
         ]
@@ -195,7 +192,7 @@ class ListingUpdateSerializer(serializers.ModelSerializer):
         model = Listing
         fields = [
             'title', 'description', 'listing_type', 'category',
-            'location', 'price_type', 'price', 'price_min',
+            'price_type', 'price', 'price_min',
             'price_max', 'currency', 'is_price_negotiable',
             'tag_ids', 'metadata', 'status'
         ]

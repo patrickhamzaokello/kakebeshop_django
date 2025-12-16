@@ -71,7 +71,7 @@ class ListingViewSet(viewsets.ViewSet):
             is_verified=True,
             deleted_at__isnull=True,
             merchant__verified=True  # Only show listings from verified merchants
-        ).select_related('merchant', 'merchant__user', 'category', 'location').prefetch_related('images', 'tags')
+        ).select_related('merchant', 'merchant__user', 'category').prefetch_related('images', 'tags')
 
     def list(self, request):
         """List verified and active listings with filtering and search"""
@@ -95,10 +95,6 @@ class ListingViewSet(viewsets.ViewSet):
         if category_id:
             queryset = queryset.filter(category_id=category_id)
 
-        # Filter by location
-        location_id = request.query_params.get('location', None)
-        if location_id:
-            queryset = queryset.filter(location_id=location_id)
 
         # Filter by merchant
         merchant_id = request.query_params.get('merchant', None)
@@ -196,7 +192,7 @@ class ListingViewSet(viewsets.ViewSet):
         queryset = Listing.objects.filter(
             merchant=merchant,
             deleted_at__isnull=True
-        ).select_related('category', 'location').prefetch_related('images', 'tags')
+        ).select_related('category').prefetch_related('images', 'tags')
 
         # Filter by status if provided
         status_filter = request.query_params.get('status', None)

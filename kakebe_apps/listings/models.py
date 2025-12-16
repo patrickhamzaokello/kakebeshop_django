@@ -4,7 +4,6 @@ from django.db import models
 from django.core.validators import MinValueValidator
 
 from kakebe_apps.categories.models import Category, Tag
-from kakebe_apps.location.models import Location
 from kakebe_apps.merchants.models import Merchant
 
 
@@ -43,11 +42,7 @@ class Listing(models.Model):
         on_delete=models.PROTECT,
         related_name='listings'
     )
-    location = models.ForeignKey(
-        Location,
-        on_delete=models.PROTECT,
-        related_name='listings'
-    )
+
     tags = models.ManyToManyField(Tag, through='ListingTag', related_name='listings')
 
     # Pricing
@@ -110,7 +105,6 @@ class Listing(models.Model):
         indexes = [
             models.Index(fields=['merchant', 'status']),
             models.Index(fields=['category', 'status']),
-            models.Index(fields=['location', 'status']),
             models.Index(fields=['is_verified', 'status']),
             models.Index(fields=['is_featured', 'is_verified', 'status']),
             models.Index(fields=['-created_at']),
