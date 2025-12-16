@@ -295,22 +295,22 @@ class UserProfileSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = ['id', 'email', 'username', 'created_at', 'updated_at']
 
-        def get_merchant(self, obj):
-            """
-            Return merchant details if user has a merchant profile
-            """
-            try:
-                if hasattr(obj, 'merchant_profile'):
-                    return MerchantSerializer(obj.merchant_profile).data
-                return None
-            except Exception:
-                return None
+    def get_merchant(self, obj):
+        """
+        Return merchant details if user has a merchant profile
+        """
+        try:
+            if hasattr(obj, 'merchant_profile'):
+                return MerchantSerializer(obj.merchant_profile).data
+            return None
+        except Exception:
+            return None
 
-        def get_is_merchant(self, obj):
-            """
-            Check if user has a merchant profile
-            """
-            return hasattr(obj, 'merchant_profile')
+    def get_is_merchant(self, obj):
+        """
+        Check if user has a merchant profile
+        """
+        return hasattr(obj, 'merchant_profile')
 
 
 class PushTokenSerializer(serializers.ModelSerializer):
