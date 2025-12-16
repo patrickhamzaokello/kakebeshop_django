@@ -1,8 +1,6 @@
 from django.contrib import admin
 from django.utils.html import format_html
-from django.urls import reverse
 from django.utils import timezone
-from django.db.models import Sum, F, Q
 from .models import PromotionalBanner, BannerListing
 
 
@@ -91,8 +89,6 @@ class PromotionalBannerAdmin(admin.ModelAdmin):
             '<strong>👁 {}</strong> | <strong>🖱 {}</strong> | <strong>📊 {}%</strong>',
             obj.impressions, obj.clicks, f'{ctr:.1f}'
         )
-
-    stats.short_description = 'Impressions | Clicks | CTR'
 
     stats.short_description = 'Impressions | Clicks | CTR'
 
