@@ -28,6 +28,8 @@ import random
 import string
 import logging
 
+from ..engagement.serializers import UserProfileSerializer
+
 logger = logging.getLogger(__name__)
 
 
@@ -799,3 +801,97 @@ class GetPhoneStatusView(views.APIView):
                 'error': 'Failed to get phone status',
                 'message': 'Please try again later'
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+class UserProfileView(generics.RetrieveUpdateAPIView):
+    """
+    View to retrieve and update authenticated user's profile
+    GET: Retrieve user profile
+    PUT/PATCH: Update user profile
+    """
+    permission_classes = [IsAuthenticated]
+    serializer_class = UserProfileSerializer
+
+    def get_object(self):
+        """Return the authenticated user"""
+        return self.request.user
+
+    def get(self, request, *args, **kwargs):
+        """Get user profile details"""
+        try:
+            user = self.get_object()
+            serializer = self.get_serializer(user)
+
+            return Response({
+                'success': True,
+                'user': serializer.data
+            }, status=status.HTTP_200_OK)
+
+        except Exception as e:
+            logger.error(f"Error retrieving user profile: {str(e)}", exc_info=True)
+            return Response({
+                'error': 'Failed to retrieve profile',
+                'message': 'Please try again later'
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+    def update(self, request, *args, **kwargs):
+        """Update user profile"""
+        try:
+            partial = kwargs.pop('partial', False)
+            user = self.get_object()
+            serializer = self.get_serializer(user, data=request.data, partial=partial)
+            serializer.is_valid(raise_exception=True)
+            serializer.save()
+
+            return Response({
+                'success': True,
+                'message': 'Profile updated successfully',
+                'user': serializer.data
+            }, status=status.HTTP_200_OK)
+
+        except ValidationError as e:
+            return Response({
+                'error': 'Validation failed',
+                'details': e.detail
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+        except Exception as e:
+            logger.error(f"Error updating user profile: {str(e)}", exc_info=True)
+            return Response({
+                'error': 'Failed to update profile',
+                'message': 'Please try again later'
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+    @swagger_auto_schema(
+        operation_description="Get authenticated user's profile",
+        responses={
+            200: UserProfileSerializer,
+            401: "Unauthorized"
+        }
+    )
+    def get(self, request, *args, **kwargs):
+        return super().get(request, *args, **kwargs)
+
+    @swagger_auto_schema(
+        operation_description="Update authenticated user's profile",
+        request_body=UserProfileSerializer,
+        responses={
+            200: UserProfileSerializer,
+            400: "Validation error",
+            401: "Unauthorized"
+        }
+    )
+    def put(self, request, *args, **kwargs):
+        return super().update(request, *args, **kwargs)
+
+    @swagger_auto_schema(
+        operation_description="Partially update authenticated user's profile",
+        request_body=UserProfileSerializer,
+        responses={
+            200: UserProfileSerializer,
+            400: "Validation error",
+            401: "Unauthorized"
+        }
+    )
+    def patch(self, request, *args, **kwargs):
+        return self.partial_update(request, *args, **kwargs)
