@@ -30,6 +30,10 @@ class Merchant(models.Model):
     verified = models.BooleanField(default=False, db_index=True)
     verification_date = models.DateTimeField(null=True, blank=True)
 
+    # Featured field for homepage
+    featured = models.BooleanField(default=False, db_index=True)
+    featured_order = models.PositiveIntegerField(default=0, db_index=True)
+
     # Rating with validation
     rating = models.FloatField(
         default=0.0,
@@ -58,6 +62,7 @@ class Merchant(models.Model):
             models.Index(fields=['verified', 'status']),
             models.Index(fields=['-rating', 'display_name']),
             models.Index(fields=['-created_at']),
+            models.Index(fields=['featured', 'verified', 'status']),
         ]
         ordering = ['-created_at']
 
@@ -66,8 +71,12 @@ class Merchant(models.Model):
 
     @property
     def is_active(self):
-        """Check if merchant is active and not deleted"""
-        return self.status == 'ACTIVE' and self.deleted_at is None
+        """Check if merchant is active, verified, and not deleted"""
+        return (
+                self.status == 'ACTIVE'
+                and self.verified
+                and self.deleted_at is None
+        )
 
     def soft_delete(self):
         """Soft delete the merchant"""

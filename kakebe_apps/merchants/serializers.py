@@ -14,7 +14,7 @@ class MerchantListSerializer(serializers.ModelSerializer):
         model = Merchant
         fields = [
             'id', 'display_name', 'business_name',
-            'logo', 'rating', 'total_reviews', 'verified'
+            'logo', 'rating', 'total_reviews', 'verified', 'featured'
         ]
 
 
@@ -31,13 +31,15 @@ class MerchantDetailSerializer(serializers.ModelSerializer):
             'id', 'user_id', 'username', 'email',
             'display_name', 'business_name', 'description',
             'business_phone', 'business_email', 'logo', 'cover_image',
-            'verified', 'verification_date', 'rating', 'total_reviews',
-            'status', 'is_active', 'created_at', 'updated_at'
+            'verified', 'verification_date', 'featured',
+            'rating', 'total_reviews', 'status', 'is_active',
+            'created_at', 'updated_at'
         ]
         read_only_fields = [
             'id', 'user_id', 'username', 'email',
-            'verified', 'verification_date', 'rating', 'total_reviews',
-            'status', 'is_active', 'created_at', 'updated_at'
+            'verified', 'verification_date', 'featured',
+            'rating', 'total_reviews', 'status', 'is_active',
+            'created_at', 'updated_at'
         ]
 
 
@@ -99,4 +101,9 @@ class MerchantCreateSerializer(serializers.ModelSerializer):
 
     def create(self, validated_data):
         user = self.context['request'].user
-        return Merchant.objects.create(user=user, **validated_data)
+        # New merchants start as unverified
+        return Merchant.objects.create(
+            user=user,
+            verified=False,
+            **validated_data
+        )

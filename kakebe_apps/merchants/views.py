@@ -1,6 +1,6 @@
 # kakebe_apps/merchants/views.py
 
-from rest_framework import viewsets, permissions, status, filters
+from rest_framework import viewsets, permissions, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.pagination import PageNumberPagination
@@ -34,8 +34,9 @@ class MerchantViewSet(viewsets.ViewSet):
     ViewSet for merchant operations:
 
     Public endpoints:
-    - list: GET /merchants/ - Paginated list of active merchants
+    - list: GET /merchants/ - Paginated list of verified, active merchants
     - retrieve: GET /merchants/{id}/ - Public merchant profile
+    - featured: GET /merchants/featured/ - Shuffled featured merchants
 
     Authenticated endpoints:
     - me: GET /merchants/me/ - Get own merchant profile
@@ -46,14 +47,15 @@ class MerchantViewSet(viewsets.ViewSet):
     pagination_class = MerchantPagination
 
     def get_queryset(self):
-        """Base queryset for active merchants"""
+        """Base queryset for verified, active merchants only"""
         return Merchant.objects.filter(
             status='ACTIVE',
+            verified=True,
             deleted_at__isnull=True
         ).select_related('user')
 
     def list(self, request):
-        """List active merchants with filtering and search"""
+        """List verified and active merchants with filtering and search"""
         queryset = self.get_queryset()
 
         # Search functionality
@@ -64,11 +66,6 @@ class MerchantViewSet(viewsets.ViewSet):
                 Q(business_name__icontains=search) |
                 Q(description__icontains=search)
             )
-
-        # Filter by verified status
-        verified = request.query_params.get('verified', None)
-        if verified is not None:
-            queryset = queryset.filter(verified=verified.lower() == 'true')
 
         # Filter by minimum rating
         min_rating = request.query_params.get('min_rating', None)
@@ -103,15 +100,37 @@ class MerchantViewSet(viewsets.ViewSet):
         return Response(serializer.data)
 
     def retrieve(self, request, pk=None):
-        """Retrieve single merchant profile"""
+        """Retrieve single merchant profile (must be verified and active)"""
         merchant = get_object_or_404(self.get_queryset(), pk=pk)
         serializer = MerchantDetailSerializer(merchant, context={'request': request})
         return Response(serializer.data)
 
+    @action(detail=False, methods=['get'], url_path='featured')
+    def featured(self, request):
+        """
+        Get featured merchants in shuffled order.
+        Query params:
+        - limit: Number of merchants to return (default: 10, max: 50)
+        """
+        limit = request.query_params.get('limit', 10)
+        try:
+            limit = min(int(limit), 50)  # Cap at 50
+        except ValueError:
+            limit = 10
+
+        # Get featured, verified, and active merchants in random order
+        queryset = self.get_queryset().filter(featured=True).order_by('?')[:limit]
+
+        serializer = MerchantListSerializer(
+            queryset, many=True, context={'request': request}
+        )
+        return Response(serializer.data)
+
     @action(detail=False, methods=['get'], permission_classes=[permissions.IsAuthenticated])
     def me(self, request):
-        """Get authenticated user's merchant profile"""
+        """Get authenticated user's merchant profile (regardless of verification status)"""
         try:
+            # Allow user to see their own profile even if not verified
             merchant = Merchant.objects.get(user=request.user)
             serializer = MerchantDetailSerializer(merchant, context={'request': request})
             return Response(serializer.data)
@@ -141,7 +160,7 @@ class MerchantViewSet(viewsets.ViewSet):
 
     @action(detail=False, methods=['post'], permission_classes=[permissions.IsAuthenticated])
     def create_profile(self, request):
-        """Create a merchant profile for authenticated user"""
+        """Create a merchant profile for authenticated user (starts unverified)"""
         serializer = MerchantCreateSerializer(
             data=request.data,
             context={'request': request}
