@@ -813,8 +813,12 @@ class UserProfileView(generics.RetrieveUpdateAPIView):
     serializer_class = UserProfileSerializer
 
     def get_object(self):
-        """Return the authenticated user"""
-        return self.request.user
+        """Return the authenticated user with related data"""
+        return User.objects.select_related(
+            'marketplace_intent',
+            'onboarding_status',
+            'merchant_profile'
+        ).get(pk=self.request.user.pk)
 
     def get(self, request, *args, **kwargs):
         """Get user profile details"""
@@ -861,37 +865,3 @@ class UserProfileView(generics.RetrieveUpdateAPIView):
                 'error': 'Failed to update profile',
                 'message': 'Please try again later'
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-
-    @swagger_auto_schema(
-        operation_description="Get authenticated user's profile",
-        responses={
-            200: UserProfileSerializer,
-            401: "Unauthorized"
-        }
-    )
-    def get(self, request, *args, **kwargs):
-        return super().get(request, *args, **kwargs)
-
-    @swagger_auto_schema(
-        operation_description="Update authenticated user's profile",
-        request_body=UserProfileSerializer,
-        responses={
-            200: UserProfileSerializer,
-            400: "Validation error",
-            401: "Unauthorized"
-        }
-    )
-    def put(self, request, *args, **kwargs):
-        return super().update(request, *args, **kwargs)
-
-    @swagger_auto_schema(
-        operation_description="Partially update authenticated user's profile",
-        request_body=UserProfileSerializer,
-        responses={
-            200: UserProfileSerializer,
-            400: "Validation error",
-            401: "Unauthorized"
-        }
-    )
-    def patch(self, request, *args, **kwargs):
-        return self.partial_update(request, *args, **kwargs)

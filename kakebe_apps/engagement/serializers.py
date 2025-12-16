@@ -14,6 +14,7 @@ from kakebe_apps.orders.models import OrderIntent
 
 from .models import UserIntent, OnboardingStatus
 from ..authentication.models import User
+from ..merchants.serializers import MerchantSerializer
 
 
 class FavoriteSerializer(serializers.ModelSerializer):
@@ -270,6 +271,8 @@ class UserProfileSerializer(serializers.ModelSerializer):
 
     intent = UserIntentSerializer(source='marketplace_intent', read_only=True)
     onboarding = OnboardingStatusSerializer(source='onboarding_status', read_only=True)
+    merchant = serializers.SerializerMethodField()
+    is_merchant = serializers.SerializerMethodField()
 
     class Meta:
         model = User
@@ -285,10 +288,29 @@ class UserProfileSerializer(serializers.ModelSerializer):
             'phone_verified',
             'intent',
             'onboarding',
+            'merchant',
+            'is_merchant',
             'created_at',
             'updated_at'
         ]
         read_only_fields = ['id', 'email', 'username', 'created_at', 'updated_at']
+
+        def get_merchant(self, obj):
+            """
+            Return merchant details if user has a merchant profile
+            """
+            try:
+                if hasattr(obj, 'merchant_profile'):
+                    return MerchantSerializer(obj.merchant_profile).data
+                return None
+            except Exception:
+                return None
+
+        def get_is_merchant(self, obj):
+            """
+            Check if user has a merchant profile
+            """
+            return hasattr(obj, 'merchant_profile')
 
 
 class PushTokenSerializer(serializers.ModelSerializer):
