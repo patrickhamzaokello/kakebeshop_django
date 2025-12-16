@@ -1,94 +1,65 @@
-# kakebe_apps/promotions/serializers.py
-
+# ===== serializers.py =====
 from rest_framework import serializers
-from django.utils import timezone
-
-from .models import (
-    PromotionalCampaign, CampaignListing,
-    CampaignCreative, CampaignPlacement
-)
-from kakebe_apps.listings.models import Listing
+from .models import PromotionalBanner, BannerListing
 
 
-class CampaignListingSerializer(serializers.ModelSerializer):
+class BannerListingSerializer(serializers.ModelSerializer):
     listing_title = serializers.CharField(source='listing.title', read_only=True)
-    listing_image = serializers.URLField(source='listing.main_image', read_only=True)
+    listing_image = serializers.URLField(source='listing.image', read_only=True)
 
     class Meta:
-        model = CampaignListing
-        fields = [
-            'id', 'listing', 'listing_title', 'listing_image',
-            'impressions', 'clicks', 'conversions', 'created_at'
-        ]
-        read_only_fields = ['impressions', 'clicks', 'conversions', 'created_at']
+        model = BannerListing
+        fields = ['id', 'listing', 'listing_title', 'listing_image', 'sort_order']
 
 
-class CampaignPlacementSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = CampaignPlacement
-        fields = [
-            'id', 'placement', 'target_type', 'target_id',
-            'target_url', 'created_at'
-        ]
-        read_only_fields = ['created_at']
-
-
-class CampaignCreativeSerializer(serializers.ModelSerializer):
-    placements = CampaignPlacementSerializer(many=True, read_only=True)
+class PromotionalBannerSerializer(serializers.ModelSerializer):
+    featured_listings = BannerListingSerializer(many=True, read_only=True)
+    is_currently_active = serializers.BooleanField(read_only=True)
+    click_through_rate = serializers.SerializerMethodField()
+    category_name = serializers.CharField(source='link_category.name', read_only=True)
 
     class Meta:
-        model = CampaignCreative
+        model = PromotionalBanner
         fields = [
-            'id', 'creative_type', 'title', 'subtitle', 'image',
-            'thumbnail', 'platform', 'cta_text', 'sort_order',
-            'is_active', 'start_date', 'end_date', 'created_at',
-            'placements'
+            'id', 'title', 'description', 'display_type', 'placement', 'platform',
+            'image', 'mobile_image', 'link_type', 'link_url', 'link_category',
+            'category_name', 'cta_text', 'start_date', 'end_date', 'is_verified',
+            'is_active', 'sort_order', 'impressions', 'clicks', 'click_through_rate',
+            'featured_listings', 'is_currently_active', 'created_at', 'updated_at'
         ]
-        read_only_fields = ['created_at']
+        read_only_fields = ['impressions', 'clicks', 'verified_at', 'created_at', 'updated_at']
+
+    def get_click_through_rate(self, obj):
+        return round(obj.get_click_through_rate(), 2)
+
+    def validate(self, data):
+        if data.get('end_date') and data.get('start_date'):
+            if data['end_date'] <= data['start_date']:
+                raise serializers.ValidationError("End date must be after start date")
+
+        if data.get('link_type') == 'URL' and not data.get('link_url'):
+            raise serializers.ValidationError("Link URL is required when link type is URL")
+
+        if data.get('link_type') == 'CATEGORY' and not data.get('link_category'):
+            raise serializers.ValidationError("Category is required when link type is Category")
+
+        return data
 
 
-class PromotionalCampaignSerializer(serializers.ModelSerializer):
-    creatives = CampaignCreativeSerializer(many=True, read_only=True)
-    # FIXED: Removed redundant source='listings' since field name matches the relation name
-    listings = CampaignListingSerializer(many=True, read_only=True)
+class PromotionalBannerListSerializer(serializers.ModelSerializer):
+    """Lightweight serializer for list views"""
+    category_name = serializers.CharField(source='link_category.name', read_only=True)
 
     class Meta:
-        model = PromotionalCampaign
+        model = PromotionalBanner
         fields = [
-            'id', 'name', 'description', 'campaign_type',
-            'start_date', 'end_date', 'budget', 'status',
-            'created_at', 'updated_at',
-            'creatives', 'listings'
+            'id', 'title', 'display_type', 'placement', 'image', 'mobile_image',
+            'link_type', 'link_url', 'link_category', 'category_name', 'cta_text',
+            'start_date', 'end_date', 'is_verified', 'is_active', 'sort_order'
         ]
-        read_only_fields = ['created_at', 'updated_at']
-
-    def validate(self, attrs):
-        start_date = attrs.get('start_date', self.instance.start_date if self.instance else None)
-        end_date = attrs.get('end_date', self.instance.end_date if self.instance else None)
-
-        if start_date and end_date and end_date < start_date:
-            raise serializers.ValidationError("end_date cannot be before start_date.")
-
-        status = attrs.get('status')
-        if status == 'ACTIVE':
-            now = timezone.now()
-            if start_date and start_date > now:
-                raise serializers.ValidationError("Cannot activate campaign before start_date.")
-            if end_date and end_date < now:
-                raise serializers.ValidationError("Cannot activate campaign after end_date.")
-
-        return attrs
 
 
-# Read-only serializer for public active creatives (e.g., home page banners)
-class ActiveCreativeSerializer(serializers.ModelSerializer):
-    placements = CampaignPlacementSerializer(many=True, read_only=True)
-
+class BannerListingCreateSerializer(serializers.ModelSerializer):
     class Meta:
-        model = CampaignCreative
-        fields = [
-            'id', 'creative_type', 'title', 'subtitle', 'image',
-            'thumbnail', 'platform', 'cta_text', 'sort_order',
-            'placements'
-        ]
-        read_only_fields = fields  # All fields are read-only
+        model = BannerListing
+        fields = ['listing', 'sort_order']
