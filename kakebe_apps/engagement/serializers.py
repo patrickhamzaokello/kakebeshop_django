@@ -14,7 +14,7 @@ from kakebe_apps.orders.models import OrderIntent
 
 from .models import UserIntent, OnboardingStatus
 from ..authentication.models import User
-from ..merchants.serializers import MerchantSerializer
+from ..merchants.serializers import MerchantDetailSerializer
 
 
 class FavoriteSerializer(serializers.ModelSerializer):
@@ -301,7 +301,7 @@ class UserProfileSerializer(serializers.ModelSerializer):
         """
         try:
             if hasattr(obj, 'merchant_profile'):
-                return MerchantSerializer(obj.merchant_profile).data
+                return MerchantDetailSerializer(obj.merchant_profile).data
             return None
         except Exception:
             return None

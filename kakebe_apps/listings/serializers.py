@@ -4,7 +4,7 @@ from rest_framework import serializers
 from .models import Listing, ListingTag, ListingImage, ListingBusinessHour
 from kakebe_apps.categories.serializers import CategorySerializer, TagSerializer  # Assuming serializers exist in categories app
 from kakebe_apps.location.serializers import LocationSerializer  # Assuming serializer exists in location app
-from kakebe_apps.merchants.serializers import MerchantSerializer  # Assuming serializer exists in merchants app
+from kakebe_apps.merchants.serializers import MerchantDetailSerializer  # Assuming serializer exists in merchants app
 
 class ListingTagSerializer(serializers.ModelSerializer):
     tag = TagSerializer(read_only=True)
@@ -24,7 +24,7 @@ class ListingBusinessHourSerializer(serializers.ModelSerializer):
         fields = ['id', 'day', 'opens_at', 'closes_at', 'is_closed', 'created_at']
 
 class ListingSerializer(serializers.ModelSerializer):
-    merchant = MerchantSerializer(read_only=True)
+    merchant = MerchantDetailSerializer(read_only=True)
     category = CategorySerializer(read_only=True)
     location = LocationSerializer(read_only=True)
     tags = TagSerializer(many=True, read_only=True)
