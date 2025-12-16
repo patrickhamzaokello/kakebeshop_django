@@ -1,13 +1,13 @@
 import uuid
 
 from django.db import models
+from django.core.validators import MinValueValidator
 
 from kakebe_apps.categories.models import Category, Tag
 from kakebe_apps.location.models import Location
 from kakebe_apps.merchants.models import Merchant
 
 
-# Create your models here.
 class Listing(models.Model):
     LISTING_TYPE_CHOICES = [
         ('PRODUCT', 'Product'),
@@ -22,7 +22,7 @@ class Listing(models.Model):
 
     STATUS_CHOICES = [
         ('DRAFT', 'Draft'),
-        ('PENDING', 'Pending'),
+        ('PENDING', 'Pending Review'),
         ('ACTIVE', 'Active'),
         ('CLOSED', 'Closed'),
         ('DEACTIVATED', 'Deactivated'),
@@ -30,31 +30,76 @@ class Listing(models.Model):
     ]
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    merchant = models.ForeignKey(Merchant, on_delete=models.CASCADE, related_name='listings')
-    title = models.CharField(max_length=255)
+    merchant = models.ForeignKey(
+        Merchant,
+        on_delete=models.CASCADE,
+        related_name='listings'
+    )
+    title = models.CharField(max_length=255, db_index=True)
     description = models.TextField()
     listing_type = models.CharField(max_length=20, choices=LISTING_TYPE_CHOICES)
-    category = models.ForeignKey(Category, on_delete=models.PROTECT, related_name='listings')
-    location = models.ForeignKey(Location, on_delete=models.PROTECT, related_name='listings')
+    category = models.ForeignKey(
+        Category,
+        on_delete=models.PROTECT,
+        related_name='listings'
+    )
+    location = models.ForeignKey(
+        Location,
+        on_delete=models.PROTECT,
+        related_name='listings'
+    )
     tags = models.ManyToManyField(Tag, through='ListingTag', related_name='listings')
 
+    # Pricing
     price_type = models.CharField(max_length=20, choices=PRICE_TYPE_CHOICES)
-    price = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
-    price_min = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
-    price_max = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
+    price = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        validators=[MinValueValidator(0)]
+    )
+    price_min = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        validators=[MinValueValidator(0)]
+    )
+    price_max = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        validators=[MinValueValidator(0)]
+    )
     currency = models.CharField(max_length=3, default='UGX')
     is_price_negotiable = models.BooleanField(default=False)
 
-    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='DRAFT', db_index=True)
+    # Status and verification
+    status = models.CharField(
+        max_length=20,
+        choices=STATUS_CHOICES,
+        default='DRAFT',
+        db_index=True
+    )
     rejection_reason = models.TextField(null=True, blank=True)
-    is_verified = models.BooleanField(default=False)
+    is_verified = models.BooleanField(default=False, db_index=True)
+    verified_at = models.DateTimeField(null=True, blank=True)
+
+    # Featured settings
     is_featured = models.BooleanField(default=False, db_index=True)
     featured_until = models.DateTimeField(null=True, blank=True)
+    featured_order = models.PositiveIntegerField(default=0)
 
-    views_count = models.IntegerField(default=0)
-    contact_count = models.IntegerField(default=0)
+    # Engagement metrics
+    views_count = models.PositiveIntegerField(default=0)
+    contact_count = models.PositiveIntegerField(default=0)
+
+    # Additional data
     metadata = models.JSONField(null=True, blank=True)
 
+    # Timestamps
     expires_at = models.DateTimeField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True, db_index=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -63,16 +108,49 @@ class Listing(models.Model):
     class Meta:
         db_table = 'listings'
         indexes = [
-            models.Index(fields=['merchant']),
-            models.Index(fields=['category']),
-            models.Index(fields=['location']),
-            models.Index(fields=['status']),
-            models.Index(fields=['is_featured']),
-            models.Index(fields=['created_at']),
+            models.Index(fields=['merchant', 'status']),
+            models.Index(fields=['category', 'status']),
+            models.Index(fields=['location', 'status']),
+            models.Index(fields=['is_verified', 'status']),
+            models.Index(fields=['is_featured', 'is_verified', 'status']),
+            models.Index(fields=['-created_at']),
+            models.Index(fields=['listing_type', 'status']),
         ]
+        ordering = ['-created_at']
 
     def __str__(self):
         return self.title
+
+    @property
+    def is_active(self):
+        """Check if listing is verified, active, and not deleted"""
+        return (
+                self.status == 'ACTIVE'
+                and self.is_verified
+                and self.deleted_at is None
+        )
+
+    @property
+    def primary_image(self):
+        """Get the primary image or first image"""
+        return self.images.filter(is_primary=True).first() or self.images.first()
+
+    def soft_delete(self):
+        """Soft delete the listing"""
+        from django.utils import timezone
+        self.deleted_at = timezone.now()
+        self.status = 'DEACTIVATED'
+        self.save(update_fields=['deleted_at', 'status'])
+
+    def increment_views(self):
+        """Increment view count"""
+        self.views_count += 1
+        self.save(update_fields=['views_count'])
+
+    def increment_contacts(self):
+        """Increment contact count"""
+        self.contact_count += 1
+        self.save(update_fields=['contact_count'])
 
 
 class ListingTag(models.Model):
@@ -88,26 +166,42 @@ class ListingTag(models.Model):
             models.Index(fields=['tag']),
         ]
 
+    def __str__(self):
+        return f"{self.listing.title} - {self.tag.name}"
+
 
 class ListingImage(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    listing = models.ForeignKey(Listing, on_delete=models.CASCADE, related_name='images')
+    listing = models.ForeignKey(
+        Listing,
+        on_delete=models.CASCADE,
+        related_name='images'
+    )
     image = models.URLField()
     thumbnail = models.URLField(null=True, blank=True)
     is_primary = models.BooleanField(default=False)
-    sort_order = models.IntegerField(default=0)
+    sort_order = models.PositiveIntegerField(default=0)
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
         db_table = 'listing_images'
         indexes = [
-            models.Index(fields=['listing']),
-            models.Index(fields=['is_primary']),
+            models.Index(fields=['listing', 'is_primary']),
+            models.Index(fields=['listing', 'sort_order']),
         ]
-        ordering = ['sort_order']
+        ordering = ['sort_order', 'created_at']
 
     def __str__(self):
         return f"Image for {self.listing.title}"
+
+    def save(self, *args, **kwargs):
+        # If this is set as primary, unset other primary images for this listing
+        if self.is_primary:
+            ListingImage.objects.filter(
+                listing=self.listing,
+                is_primary=True
+            ).exclude(id=self.id).update(is_primary=False)
+        super().save(*args, **kwargs)
 
 
 class ListingBusinessHour(models.Model):
@@ -122,19 +216,25 @@ class ListingBusinessHour(models.Model):
     ]
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    listing = models.ForeignKey(Listing, on_delete=models.CASCADE, related_name='business_hours')
+    listing = models.ForeignKey(
+        Listing,
+        on_delete=models.CASCADE,
+        related_name='business_hours'
+    )
     day = models.CharField(max_length=3, choices=DAY_CHOICES)
-    opens_at = models.TimeField()
-    closes_at = models.TimeField()
+    opens_at = models.TimeField(null=True, blank=True)
+    closes_at = models.TimeField(null=True, blank=True)
     is_closed = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
         db_table = 'listing_business_hours'
+        unique_together = ('listing', 'day')
         indexes = [
             models.Index(fields=['listing']),
             models.Index(fields=['day']),
         ]
+        ordering = ['day']
 
     def __str__(self):
-        return f"{self.listing.title} - {self.day}"
+        return f"{self.listing.title} - {self.get_day_display()}"

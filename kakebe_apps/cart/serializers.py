@@ -1,12 +1,12 @@
 # kakebe_apps/cart/serializers.py
 
 from rest_framework import serializers
-from kakebe_apps.listings.serializers import ListingSerializer  # Minimal listing info in cart
+from kakebe_apps.listings.serializers import ListingListSerializer  # Minimal listing info in cart
 from .models import Cart, CartItem
 
 
 class CartItemSerializer(serializers.ModelSerializer):
-    listing = ListingSerializer(read_only=True)
+    listing = ListingListSerializer(read_only=True)
     listing_id = serializers.UUIDField(write_only=True)  # For adding/updating
 
     total_price = serializers.SerializerMethodField()
