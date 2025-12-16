@@ -88,9 +88,11 @@ class PromotionalBannerAdmin(admin.ModelAdmin):
     def stats(self, obj):
         ctr = obj.get_click_through_rate()
         return format_html(
-            '<strong>👁 {}</strong> | <strong>🖱 {}</strong> | <strong>📊 {:.1f}%</strong>',
-            obj.impressions, obj.clicks, ctr
+            '<strong>👁 {}</strong> | <strong>🖱 {}</strong> | <strong>📊 {}%</strong>',
+            obj.impressions, obj.clicks, f'{ctr:.1f}'
         )
+
+    stats.short_description = 'Impressions | Clicks | CTR'
 
     stats.short_description = 'Impressions | Clicks | CTR'
 
