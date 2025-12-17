@@ -1,49 +1,77 @@
-# kakebe_apps/cart/serializers.py
-
 from rest_framework import serializers
-from kakebe_apps.listings.serializers import ListingListSerializer  # Minimal listing info in cart
-from .models import Cart, CartItem
+from .models import Cart, CartItem, Wishlist, WishlistItem
+from kakebe_apps.listings.models import Listing
+
+
+class ListingBasicSerializer(serializers.ModelSerializer):
+    """Basic listing info for cart/wishlist items"""
+    class Meta:
+        model = Listing
+        fields = ['id', 'title', 'price', 'image', 'slug']
 
 
 class CartItemSerializer(serializers.ModelSerializer):
-    listing = ListingListSerializer(read_only=True)
-    listing_id = serializers.UUIDField(write_only=True)  # For adding/updating
-
-    total_price = serializers.SerializerMethodField()
+    listing = ListingBasicSerializer(read_only=True)
+    subtotal = serializers.DecimalField(max_digits=10, decimal_places=2, read_only=True)
 
     class Meta:
         model = CartItem
-        fields = [
-            'id', 'listing', 'listing_id', 'quantity',
-            'total_price', 'created_at', 'updated_at'
-        ]
-        read_only_fields = ['id', 'created_at', 'updated_at', 'total_price']
-
-    def get_total_price(self, obj):
-        # Assumes fixed price; adjust if using price ranges or negotiable
-        if obj.listing.price:
-            return obj.quantity * obj.listing.price
-        return None
+        fields = ['id', 'listing', 'quantity', 'subtotal', 'created_at', 'updated_at']
+        read_only_fields = ['id', 'created_at', 'updated_at']
 
 
 class CartSerializer(serializers.ModelSerializer):
     items = CartItemSerializer(many=True, read_only=True)
-    items_count = serializers.IntegerField(source='items.count', read_only=True)
-    total_items_quantity = serializers.SerializerMethodField()
-    subtotal = serializers.SerializerMethodField()
+    total_items = serializers.IntegerField(read_only=True)
+    total_price = serializers.DecimalField(max_digits=10, decimal_places=2, read_only=True)
 
     class Meta:
         model = Cart
-        fields = ['id', 'items', 'items_count', 'total_items_quantity', 'subtotal', 'created_at', 'updated_at']
+        fields = ['id', 'items', 'total_items', 'total_price', 'created_at', 'updated_at']
         read_only_fields = ['id', 'created_at', 'updated_at']
 
-    def get_total_items_quantity(self, obj):
-        return sum(item.quantity for item in obj.items.all())
 
-    def get_subtotal(self, obj):
-        total = sum(
-            (item.quantity * item.listing.price)
-            for item in obj.items.all()
-            if item.listing.price
-        )
-        return total
+class AddToCartSerializer(serializers.Serializer):
+    listing_id = serializers.UUIDField()
+    quantity = serializers.IntegerField(default=1, min_value=1)
+
+    def validate_listing_id(self, value):
+        try:
+            Listing.objects.get(id=value)
+        except Listing.DoesNotExist:
+            raise serializers.ValidationError("Listing not found.")
+        return value
+
+
+class UpdateCartItemSerializer(serializers.Serializer):
+    quantity = serializers.IntegerField(min_value=1)
+
+
+class WishlistItemSerializer(serializers.ModelSerializer):
+    listing = ListingBasicSerializer(read_only=True)
+
+    class Meta:
+        model = WishlistItem
+        fields = ['id', 'listing', 'created_at']
+        read_only_fields = ['id', 'created_at']
+
+
+class WishlistSerializer(serializers.ModelSerializer):
+    items = WishlistItemSerializer(many=True, read_only=True)
+    total_items = serializers.IntegerField(read_only=True)
+
+    class Meta:
+        model = Wishlist
+        fields = ['id', 'items', 'total_items', 'created_at', 'updated_at']
+        read_only_fields = ['id', 'created_at', 'updated_at']
+
+
+class AddToWishlistSerializer(serializers.Serializer):
+    listing_id = serializers.UUIDField()
+
+    def validate_listing_id(self, value):
+        try:
+            Listing.objects.get(id=value)
+        except Listing.DoesNotExist:
+            raise serializers.ValidationError("Listing not found.")
+        return value

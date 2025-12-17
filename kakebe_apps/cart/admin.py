@@ -1,169 +1,80 @@
 from django.contrib import admin
-from django.db import models
-from django.utils.html import format_html
-from django.urls import reverse
-from .models import Cart, CartItem
+from .models import Cart, CartItem, Wishlist, WishlistItem
 
 
-# ========== Inline for Cart Items ==========
 class CartItemInline(admin.TabularInline):
     model = CartItem
     extra = 0
-    readonly_fields = ('id', 'listing_link', 'quantity', 'created_at', 'updated_at')
-    fields = ('listing_link', 'quantity', 'created_at')
-    can_delete = False
-    show_change_link = True
-    verbose_name_plural = "Cart Items"
-
-    def has_add_permission(self, request, obj=None):
-        return False
-
-    def listing_link(self, obj):
-        if obj.listing:
-            url = reverse('admin:listings_listing_change', args=[obj.listing.id])
-            return format_html('<a href="{}">{}</a>', url, obj.listing.title)
-        return "—"
-
-    listing_link.short_description = "Listing"
+    readonly_fields = ('created_at', 'updated_at', 'subtotal')
+    fields = ('listing', 'quantity', 'subtotal', 'created_at', 'updated_at')
+    raw_id_fields = ('listing',)
 
 
-# ========== Cart Item Admin ==========
-@admin.register(CartItem)
-class CartItemAdmin(admin.ModelAdmin):
-    list_display = (
-        'cart_user',
-        'listing_title',
-        'quantity',
-        'cart_link',
-        'created_at',
-        'updated_at'
-    )
-    list_filter = (
-        'created_at',
-        'updated_at',
-        'cart__user__name',
-    )
-    search_fields = (
-        'listing__title',
-        'cart__user__name',
-        'cart__user__email'
-    )
-    list_per_page = 25
-    readonly_fields = ('id', 'created_at', 'updated_at', 'cart_link', 'listing_link')
-    fieldsets = (
-        ('Basic Information', {
-            'fields': ('id', 'cart_link', 'listing_link', 'quantity')
-        }),
-        ('Timestamps', {
-            'fields': ('created_at', 'updated_at'),
-            'classes': ('collapse',)
-        })
-    )
-
-    def cart_user(self, obj):
-        return obj.cart.user.name if obj.cart.user.name else obj.cart.user.email
-
-    cart_user.short_description = "User"
-    cart_user.admin_order_field = 'cart__user__name'
-
-    def listing_title(self, obj):
-        return obj.listing.title[:50] + "..." if len(obj.listing.title) > 50 else obj.listing.title
-
-    listing_title.short_description = "Listing"
-    listing_title.admin_order_field = 'listing__title'
-
-    def cart_link(self, obj):
-        url = reverse('admin:cart_cart_change', args=[obj.cart.id])
-        return format_html('<a href="{}">Cart #{}</a>', url, str(obj.cart.id)[:8])
-
-    cart_link.short_description = "Cart"
-
-    def listing_link(self, obj):
-        url = reverse('admin:listings_listing_change', args=[obj.listing.id])
-        return format_html('<a href="{}">{}</a>', url, obj.listing.title)
-
-    listing_link.short_description = "Listing"
-
-
-# ========== Cart Admin ==========
 @admin.register(Cart)
 class CartAdmin(admin.ModelAdmin):
-    list_display = (
-        'user_info',
-        'items_count',
-        'total_quantity',
-        'created_at',
-        'updated_at'
-    )
-    list_filter = (
-        'created_at',
-        'updated_at',
-    )
-    search_fields = (
-        'user__name',
-        'user__email',
-        'user__phone'
-    )
-    list_per_page = 25
-    readonly_fields = (
-        'id',
-        'user_link',
-        'created_at',
-        'updated_at',
-        'items_count',
-        'total_quantity',
-        'items_list'
-    )
-    fieldsets = (
-        ('Basic Information', {
-            'fields': ('id', 'user_link')
-        }),
-        ('Cart Contents', {
-            'fields': ('items_count', 'total_quantity', 'items_list'),
-            'classes': ('wide',)
-        }),
-        ('Timestamps', {
-            'fields': ('created_at', 'updated_at'),
-            'classes': ('collapse',)
-        })
-    )
+    list_display = ('id', 'user', 'total_items', 'total_price', 'created_at', 'updated_at')
+    list_filter = ('created_at', 'updated_at')
+    search_fields = ('user__email', 'user__name', 'id')
+    readonly_fields = ('id', 'created_at', 'updated_at', 'total_items', 'total_price')
     inlines = [CartItemInline]
+    raw_id_fields = ('user',)
 
-    def user_info(self, obj):
-        user = obj.user
-        info = []
-        if user.name:
-            info.append(user.name)
-        if user.email:
-            info.append(f"📧 {user.email}")
-        if hasattr(user, 'phone') and user.phone:
-            info.append(f"📱 {user.phone}")
-        return format_html('<br>'.join(info))
+    def total_items(self, obj):
+        return obj.total_items
+    total_items.short_description = 'Total Items'
 
-    user_info.short_description = "User Information"
-    user_info.admin_order_field = 'user__name'
+    def total_price(self, obj):
+        return f"${obj.total_price:.2f}"
+    total_price.short_description = 'Total Price'
 
-    def items_count(self, obj):
-        return obj.items.count()
 
-    items_count.short_description = "Unique Items"
+@admin.register(CartItem)
+class CartItemAdmin(admin.ModelAdmin):
+    list_display = ('id', 'cart_user', 'listing', 'quantity', 'subtotal', 'created_at')
+    list_filter = ('created_at', 'updated_at')
+    search_fields = ('cart__user__email', 'listing__title', 'id')
+    readonly_fields = ('id', 'created_at', 'updated_at', 'subtotal')
+    raw_id_fields = ('cart', 'listing')
 
-    def total_quantity(self, obj):
-        total = obj.items.aggregate(models.Sum('quantity'))['quantity__sum']
-        return total or 0
+    def cart_user(self, obj):
+        return obj.cart.user.email
+    cart_user.short_description = 'User'
 
-    total_quantity.short_description = "Total Items"
+    def subtotal(self, obj):
+        return f"${obj.subtotal:.2f}"
+    subtotal.short_description = 'Subtotal'
 
-    def user_link(self, obj):
-        url = reverse('admin:authentication_user_change', args=[obj.user.id])
-        return format_html('<a href="{}">{}</a>', url, obj.user)
 
-    user_link.short_description = "User"
+class WishlistItemInline(admin.TabularInline):
+    model = WishlistItem
+    extra = 0
+    readonly_fields = ('created_at',)
+    fields = ('listing', 'created_at')
+    raw_id_fields = ('listing',)
 
-    def items_list(self, obj):
-        items = []
-        for item in obj.items.select_related('listing').all():
-            items.append(f"• {item.listing.title} × {item.quantity}")
-        return format_html('<br>'.join(items)) if items else "Empty cart"
 
-    items_list.short_description = "Cart Items"
+@admin.register(Wishlist)
+class WishlistAdmin(admin.ModelAdmin):
+    list_display = ('id', 'user', 'total_items', 'created_at', 'updated_at')
+    list_filter = ('created_at', 'updated_at')
+    search_fields = ('user__email', 'user__name', 'id')
+    readonly_fields = ('id', 'created_at', 'updated_at', 'total_items')
+    inlines = [WishlistItemInline]
+    raw_id_fields = ('user',)
+
+    def total_items(self, obj):
+        return obj.total_items
+    total_items.short_description = 'Total Items'
+
+
+@admin.register(WishlistItem)
+class WishlistItemAdmin(admin.ModelAdmin):
+    list_display = ('id', 'wishlist_user', 'listing', 'created_at')
+    list_filter = ('created_at',)
+    search_fields = ('wishlist__user__email', 'listing__title', 'id')
+    readonly_fields = ('id', 'created_at')
+    raw_id_fields = ('wishlist', 'listing')
+
+    def wishlist_user(self, obj):
+        return obj.wishlist.user.email
+    wishlist_user.short_description = 'User'
