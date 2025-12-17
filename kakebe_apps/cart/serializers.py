@@ -5,9 +5,21 @@ from kakebe_apps.listings.models import Listing
 
 class ListingBasicSerializer(serializers.ModelSerializer):
     """Basic listing info for cart/wishlist items"""
+    primary_image = serializers.SerializerMethodField()
+
     class Meta:
         model = Listing
-        fields = ['id', 'title', 'price', 'image', 'slug']
+        fields = ['id', 'title', 'price', 'primary_image', 'status', 'is_active']
+
+    def get_primary_image(self, obj):
+        """Get the primary image URL or first image"""
+        primary_img = obj.primary_image
+        if primary_img:
+            return {
+                'image': primary_img.image,
+                'thumbnail': primary_img.thumbnail
+            }
+        return None
 
 
 class CartItemSerializer(serializers.ModelSerializer):
