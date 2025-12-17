@@ -9,37 +9,18 @@ from django.utils import timezone
 from django.db import models
 
 from .models import (
-    Favorite, SavedSearch, Conversation, Message, Notification,
+    SavedSearch, Conversation, Message, Notification,
     ListingReview, MerchantReview, Report, MerchantScore,
     ActivityLog, AuditLog, ApiUsage, OnboardingStatus, UserIntent, PushToken
 )
 from .serializers import (
-    FavoriteSerializer, SavedSearchSerializer, ConversationSerializer,
+    SavedSearchSerializer, ConversationSerializer,
     MessageSerializer, NotificationSerializer, ListingReviewSerializer,
     MerchantReviewSerializer, ReportSerializer, MerchantScoreSerializer,
     ActivityLogSerializer, AuditLogSerializer, ApiUsageSerializer, OnboardingStatusSerializer, UserIntentSerializer,
     PushTokenSerializer, PushTokenCreateSerializer, PushTokenUpdateUsageSerializer
 )
-from ..listings.models import Listing
 
-
-class FavoriteViewSet(viewsets.ModelViewSet):
-    serializer_class = FavoriteSerializer
-    permission_classes = [IsAuthenticated]
-
-    def get_queryset(self):
-        return Favorite.objects.filter(user=self.request.user)
-
-    @action(detail=False)
-    def toggle(self, request):
-        listing_id = request.data.get('listing')
-        listing = get_object_or_404(Listing, id=listing_id)
-
-        obj, created = Favorite.objects.get_or_create(user=request.user, listing=listing)
-        if not created:
-            obj.delete()
-            return Response({'status': 'removed'})
-        return Response({'status': 'added'})
 
 
 class SavedSearchViewSet(viewsets.ModelViewSet):

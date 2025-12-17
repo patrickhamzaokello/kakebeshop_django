@@ -7,7 +7,7 @@ from django.core.serializers.json import DjangoJSONEncoder
 from django.db.models import Count, Avg, F
 import json
 from .models import (
-    Favorite, SavedSearch, Conversation, Message, Notification,
+    SavedSearch, Conversation, Message, Notification,
     ListingReview, MerchantReview, MerchantScore, Report,
     FollowUpRule, FollowUpLog, AdminUser, AuditLog,
     ApiUsage, ActivityLog, OnboardingStatus, UserIntent, PushToken
@@ -62,29 +62,6 @@ class FollowUpLogInline(admin.TabularInline):
 
     rule_name.short_description = "Rule"
 
-
-# ========== Favorite Admin ==========
-@admin.register(Favorite)
-class FavoriteAdmin(admin.ModelAdmin):
-    list_display = ('user_link', 'listing_link', 'created_at')
-    list_filter = ('created_at',)
-    search_fields = ('user__name', 'user__email', 'listing__title')
-    list_per_page = 25
-    readonly_fields = ('id', 'created_at', 'user_link', 'listing_link')
-
-    def user_link(self, obj):
-        url = reverse('admin:authentication_user_change', args=[obj.user.id])
-        return format_html('<a href="{}">{}</a>', url, obj.user.name)
-
-    user_link.short_description = "User"
-    user_link.admin_order_field = 'user__name'
-
-    def listing_link(self, obj):
-        url = reverse('admin:listings_listing_change', args=[obj.listing.id])
-        return format_html('<a href="{}">{}</a>', url, obj.listing.title[:50])
-
-    listing_link.short_description = "Listing"
-    listing_link.admin_order_field = 'listing__title'
 
 
 # ========== SavedSearch Admin ==========

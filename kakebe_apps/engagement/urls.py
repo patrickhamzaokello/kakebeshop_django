@@ -5,14 +5,13 @@ from rest_framework.routers import DefaultRouter
 from rest_framework_nested.routers import NestedDefaultRouter
 
 from .views import (
-    FavoriteViewSet, SavedSearchViewSet, ConversationViewSet,
+    SavedSearchViewSet, ConversationViewSet,
     MessageViewSet, NotificationViewSet, ListingReviewViewSet,
     MerchantReviewViewSet, ReportViewSet, MerchantScoreViewSet,
     ActivityLogViewSet, AuditLogViewSet, ApiUsageViewSet, UserIntentViewSet, OnboardingStatusViewSet, PushTokenViewSet
 )
 
 router = DefaultRouter()
-router.register(r'favorites', FavoriteViewSet, basename='favorite')
 router.register(r'saved-searches', SavedSearchViewSet, basename='saved-search')
 router.register(r'conversations', ConversationViewSet, basename='conversation')
 router.register(r'notifications', NotificationViewSet, basename='notification')

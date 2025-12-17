@@ -4,7 +4,7 @@ from rest_framework import serializers
 from django.contrib.auth import get_user_model
 
 from .models import (
-    Favorite, SavedSearch, Conversation, Message, Notification,
+     SavedSearch, Conversation, Message, Notification,
     ListingReview, MerchantReview, Report, FollowUpRule, FollowUpLog,
     AdminUser, AuditLog, ApiUsage, ActivityLog, MerchantScore, PushToken
 )
@@ -16,15 +16,6 @@ from .models import UserIntent, OnboardingStatus
 from ..authentication.models import User
 from ..merchants.serializers import MerchantDetailSerializer
 
-
-class FavoriteSerializer(serializers.ModelSerializer):
-    listing_title = serializers.CharField(source='listing.title', read_only=True)
-    listing_image = serializers.URLField(source='listing.main_image', read_only=True)
-
-    class Meta:
-        model = Favorite
-        fields = ['id', 'listing', 'listing_title', 'listing_image', 'created_at']
-        read_only_fields = ['created_at']
 
 
 class SavedSearchSerializer(serializers.ModelSerializer):
