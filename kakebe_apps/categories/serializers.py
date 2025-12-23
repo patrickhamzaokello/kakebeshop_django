@@ -11,8 +11,14 @@ class TagSerializer(serializers.ModelSerializer):
 
 class CategoryListSerializer(serializers.ModelSerializer):
     """Lightweight serializer for list views without nested children"""
-    children_count = serializers.IntegerField(read_only=True)
-    parent_name = serializers.CharField(source='parent.name', read_only=True)
+    children_count = serializers.SerializerMethodField()
+    parent_name = serializers.CharField(source='parent.name', read_only=True, allow_null=True)
+
+    def get_children_count(self, obj):
+        """Get children count from annotation or calculate it"""
+        if hasattr(obj, 'children_count'):
+            return obj.children_count
+        return obj.get_children_count()
 
     class Meta:
         model = Category
@@ -29,8 +35,14 @@ class CategoryDetailSerializer(serializers.ModelSerializer):
     """Detailed serializer with nested children for detail views"""
     children = serializers.SerializerMethodField()
     parent_details = serializers.SerializerMethodField()
-    children_count = serializers.IntegerField(read_only=True)
+    children_count = serializers.SerializerMethodField()
     breadcrumbs = serializers.SerializerMethodField()
+
+    def get_children_count(self, obj):
+        """Get children count from annotation or calculate it"""
+        if hasattr(obj, 'children_count'):
+            return obj.children_count
+        return obj.get_children_count()
 
     class Meta:
         model = Category

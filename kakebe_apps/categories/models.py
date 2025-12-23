@@ -39,9 +39,8 @@ class Category(models.Model):
             self.slug = slugify(self.name)
         super().save(*args, **kwargs)
 
-    @property
-    def children_count(self):
-        """Count active children"""
+    def get_children_count(self):
+        """Count active children - use this method or annotate in queries"""
         return self.children.filter(is_active=True).count()
 
 
