@@ -3,7 +3,7 @@
 from rest_framework import serializers
 from django.utils import timezone
 from .models import Listing, ListingTag, ListingImage, ListingBusinessHour
-from kakebe_apps.categories.serializers import CategorySerializer, TagSerializer
+from kakebe_apps.categories.serializers import CategoryListSerializer as CategorySerializer, TagSerializer
 from kakebe_apps.merchants.serializers import MerchantListSerializer
 
 

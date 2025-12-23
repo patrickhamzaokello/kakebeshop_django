@@ -1,7 +1,5 @@
-# kakebe_apps/categories/serializers.py
-
 from rest_framework import serializers
-from .models import Category,Tag
+from .models import Category, Tag
 
 
 class TagSerializer(serializers.ModelSerializer):
@@ -10,29 +8,81 @@ class TagSerializer(serializers.ModelSerializer):
         fields = ['id', 'name', 'slug', 'created_at']
         read_only_fields = ['id', 'created_at', 'slug']
 
-class CategorySerializer(serializers.ModelSerializer):
-    children = serializers.SerializerMethodField()
-    parent = serializers.PrimaryKeyRelatedField(
-        queryset=Category.objects.all(), allow_null=True, required=False
-    )
+
+class CategoryListSerializer(serializers.ModelSerializer):
+    """Lightweight serializer for list views without nested children"""
+    children_count = serializers.IntegerField(read_only=True)
+    parent_name = serializers.CharField(source='parent.name', read_only=True)
 
     class Meta:
         model = Category
         fields = [
-            'id', 'name', 'slug', 'icon', 'parent', 'children',
-            'allows_order_intent', 'allows_cart', 'is_contact_only',
-            'sort_order', 'is_active', 'created_at'
+            'id', 'name', 'slug', 'icon', 'description', 'parent', 'parent_name',
+            'children_count', 'allows_order_intent', 'allows_cart',
+            'is_contact_only', 'is_featured', 'sort_order', 'is_active',
+            'created_at', 'updated_at'
         ]
-        read_only_fields = ['id', 'created_at', 'slug']  # slug can be auto-generated if you want
+        read_only_fields = ['id', 'created_at', 'updated_at', 'slug']
+
+
+class CategoryDetailSerializer(serializers.ModelSerializer):
+    """Detailed serializer with nested children for detail views"""
+    children = serializers.SerializerMethodField()
+    parent_details = serializers.SerializerMethodField()
+    children_count = serializers.IntegerField(read_only=True)
+    breadcrumbs = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Category
+        fields = [
+            'id', 'name', 'slug', 'icon', 'description', 'parent',
+            'parent_details', 'children', 'children_count', 'breadcrumbs',
+            'allows_order_intent', 'allows_cart', 'is_contact_only',
+            'is_featured', 'sort_order', 'is_active', 'created_at', 'updated_at'
+        ]
+        read_only_fields = ['id', 'created_at', 'updated_at', 'slug']
 
     def get_children(self, obj):
-        # Return nested children recursively (optional depth control can be added)
+        """Return active children without deep nesting"""
         children_qs = obj.children.filter(is_active=True).order_by('sort_order', 'name')
-        return CategorySerializer(children_qs, many=True, context=self.context).data
+        return CategoryListSerializer(children_qs, many=True, context=self.context).data
 
-    def create(self, validated_data):
-        # You might want to auto-generate slug here
-        return super().create(validated_data)
+    def get_parent_details(self, obj):
+        """Return parent category basic info"""
+        if obj.parent:
+            return {
+                'id': obj.parent.id,
+                'name': obj.parent.name,
+                'slug': obj.parent.slug,
+            }
+        return None
 
-    def update(self, instance, validated_data):
-        return super().update(instance, validated_data)
+    def get_breadcrumbs(self, obj):
+        """Generate breadcrumb trail for navigation"""
+        breadcrumbs = []
+        current = obj
+        while current:
+            breadcrumbs.insert(0, {
+                'id': current.id,
+                'name': current.name,
+                'slug': current.slug
+            })
+            current = current.parent
+        return breadcrumbs
+
+
+class CategoryTreeSerializer(serializers.ModelSerializer):
+    """Recursive serializer for full category tree"""
+    children = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Category
+        fields = [
+            'id', 'name', 'slug', 'icon', 'children',
+            'allows_order_intent', 'allows_cart', 'is_contact_only',
+            'is_featured', 'sort_order'
+        ]
+
+    def get_children(self, obj):
+        children_qs = obj.children.filter(is_active=True).order_by('sort_order', 'name')
+        return CategoryTreeSerializer(children_qs, many=True, context=self.context).data
