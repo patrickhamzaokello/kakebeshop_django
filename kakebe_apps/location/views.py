@@ -1,5 +1,6 @@
+import requests
 from rest_framework import viewsets, status
-from rest_framework.decorators import action
+from rest_framework.decorators import action, api_view, permission_classes
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
 from django.shortcuts import get_object_or_404
@@ -204,3 +205,84 @@ class LocationViewSet(viewsets.ReadOnlyModelViewSet):
         ).distinct().order_by('area')
 
         return Response(list(areas))
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def reverse_geocode(request):
+    """
+    Reverse geocode coordinates to get location details
+    Uses Nominatim (OpenStreetMap) - free, no API key needed
+    """
+    latitude = request.data.get('latitude')
+    longitude = request.data.get('longitude')
+
+    if not latitude or not longitude:
+        return Response(
+            {'error': 'Latitude and longitude are required'},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
+    try:
+        # Use Nominatim for reverse geocoding (free, no API key)
+        url = f"https://nominatim.openstreetmap.org/reverse"
+        params = {
+            'lat': latitude,
+            'lon': longitude,
+            'format': 'json',
+            'addressdetails': 1,
+        }
+        headers = {
+            'User-Agent': 'YourMarketplaceApp/1.0'  # Required by Nominatim
+        }
+
+        response = requests.get(url, params=params, headers=headers, timeout=5)
+
+        if response.status_code == 200:
+            data = response.json()
+            address = data.get('address', {})
+
+            # Extract location details
+            location_data = {
+                'region': (
+                        address.get('region') or
+                        address.get('state') or
+                        address.get('province') or
+                        'Unknown Region'
+                ),
+                'district': (
+                        address.get('county') or
+                        address.get('district') or
+                        address.get('city_district') or
+                        address.get('suburb') or
+                        'Unknown District'
+                ),
+                'area': (
+                        address.get('suburb') or
+                        address.get('neighbourhood') or
+                        address.get('village') or
+                        address.get('town') or
+                        address.get('city') or
+                        'Unknown Area'
+                ),
+                'display_name': data.get('display_name', ''),
+                'formatted_address': data.get('display_name', '').split(',')[:3]
+            }
+
+            return Response(location_data)
+        else:
+            return Response(
+                {'error': 'Failed to reverse geocode location'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+    except requests.RequestException as e:
+        return Response(
+            {'error': f'Geocoding service error: {str(e)}'},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
+    except Exception as e:
+        return Response(
+            {'error': f'Unexpected error: {str(e)}'},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
