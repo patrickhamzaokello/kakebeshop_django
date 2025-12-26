@@ -5,8 +5,8 @@ from rest_framework.routers import DefaultRouter
 from .views import LocationViewSet, UserAddressViewSet
 
 router = DefaultRouter()
+router.register(r'addresses', UserAddressViewSet, basename='address')
 router.register(r'locations', LocationViewSet, basename='location')
-router.register(r'user-addresses', UserAddressViewSet, basename='useraddress')
 
 urlpatterns = [
     path('', include(router.urls)),
