@@ -40,6 +40,23 @@ class OrderIntent(models.Model):
     created_at = models.DateTimeField(auto_now_add=True, db_index=True)
     updated_at = models.DateTimeField(auto_now=True)
 
+    @classmethod
+    def generate_order_number(cls):
+        """Generate unique order number"""
+        import random
+        import string
+        from django.utils import timezone
+
+        timestamp = timezone.now().strftime('%Y%m%d')
+        random_str = ''.join(random.choices(string.ascii_uppercase + string.digits, k=6))
+        return f"ORD-{timestamp}-{random_str}"
+
+    def calculate_total(self):
+        """Calculate total from items"""
+        items_total = sum(item.total_price for item in self.items.all())
+        delivery = self.delivery_fee or 0
+        return items_total + delivery
+
     class Meta:
         db_table = 'order_intents'
         indexes = [

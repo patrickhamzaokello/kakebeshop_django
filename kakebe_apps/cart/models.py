@@ -13,6 +13,30 @@ class Cart(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
+    def group_items_by_merchant(self):
+        """Group cart items by merchant for multi-merchant checkout"""
+        from collections import defaultdict
+
+        grouped = defaultdict(list)
+        for item in self.items.select_related('listing__merchant').all():
+            grouped[item.listing.merchant].append(item)
+        return dict(grouped)
+
+    def clear_cart(self):
+        """Clear all items from cart"""
+        self.items.all().delete()
+
+    def validate_items(self):
+        """Validate all items are still available and active"""
+        errors = []
+        for item in self.items.select_related('listing').all():
+            if not item.listing.is_active:
+                errors.append({
+                    'item_id': str(item.id),
+                    'error': f'{item.listing.title} is no longer available'
+                })
+        return errors
+
     class Meta:
         db_table = 'carts'
         indexes = [
