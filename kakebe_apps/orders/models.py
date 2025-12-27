@@ -9,6 +9,49 @@ from kakebe_apps.location.models import UserAddress
 from kakebe_apps.merchants.models import Merchant
 
 
+
+class OrderGroup(models.Model):
+    """
+    Groups multiple OrderIntents that were created in a single checkout session.
+    Useful when cart has items from multiple merchants.
+    """
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    group_number = models.CharField(max_length=50, unique=True, db_index=True)
+    buyer = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.PROTECT,
+        related_name='order_groups'
+    )
+
+    # Summary data
+    total_amount = models.DecimalField(max_digits=12, decimal_places=2)
+    total_orders = models.PositiveIntegerField(default=0)
+
+    # Timestamps
+    created_at = models.DateTimeField(auto_now_add=True, db_index=True)
+
+    class Meta:
+        db_table = 'order_groups'
+        indexes = [
+            models.Index(fields=['buyer', '-created_at']),
+            models.Index(fields=['group_number']),
+        ]
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f"Group {self.group_number} - {self.total_orders} orders"
+
+    @classmethod
+    def generate_group_number(cls):
+        """Generate unique group number"""
+        import random
+        import string
+        from django.utils import timezone
+
+        timestamp = timezone.now().strftime('%Y%m%d')
+        random_str = ''.join(random.choices(string.ascii_uppercase + string.digits, k=4))
+        return f"GRP-{timestamp}-{random_str}"
+
 # Create your models here.
 class OrderIntent(models.Model):
     STATUS_CHOICES = [
@@ -39,6 +82,15 @@ class OrderIntent(models.Model):
     cancellation_reason = models.TextField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True, db_index=True)
     updated_at = models.DateTimeField(auto_now=True)
+
+    order_group = models.ForeignKey(
+        OrderGroup,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='orders',
+        help_text='Links orders that were placed together in one checkout'
+    )
 
     @classmethod
     def generate_order_number(cls):
