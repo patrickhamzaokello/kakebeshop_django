@@ -125,9 +125,10 @@ class OrderGroupAdmin(admin.ModelAdmin):
 
     def total_amount_display(self, obj):
         """Display total amount with currency"""
+        amount_str = f'{int(obj.total_amount):,}'
         return format_html(
-            '<strong style="color: #E60549;">UGX {:,}</strong>',
-            int(obj.total_amount)
+            '<strong style="color: #E60549;">UGX {}</strong>',
+            amount_str
         )
 
     total_amount_display.short_description = 'Total Amount'
@@ -165,11 +166,12 @@ class OrderGroupAdmin(admin.ModelAdmin):
                 'CANCELLED': '#F44336',
             }.get(order.status, '#666')
 
+            amount_str = f'{int(order.total_amount):,}'
             html += f'''
                 <div style="padding: 8px; margin: 4px 0; background: #f5f5f5; border-radius: 4px;">
                     <strong>{order.order_number}</strong> - {order.merchant.display_name}<br>
                     <span style="color: {status_color}; font-weight: bold;">{order.get_status_display()}</span> | 
-                    UGX {int(order.total_amount):,}
+                    UGX {amount_str}
                 </div>
             '''
         html += '</div>'
@@ -204,7 +206,7 @@ class OrderIntentAdmin(admin.ModelAdmin):
         'status',
         'created_at',
         'merchant',
-        OrderGroupFilter,  # Use custom filter instead of order_group__isnull
+        OrderGroupFilter,
     )
     search_fields = (
         'order_number',
@@ -301,9 +303,10 @@ class OrderIntentAdmin(admin.ModelAdmin):
 
     def total_amount_display(self, obj):
         """Display total amount with currency"""
+        amount_str = f'{int(obj.total_amount):,}'
         return format_html(
-            '<strong style="color: #E60549;">UGX {:,}</strong>',
-            int(obj.total_amount)
+            '<strong style="color: #E60549;">UGX {}</strong>',
+            amount_str
         )
 
     total_amount_display.short_description = 'Total'
@@ -358,21 +361,25 @@ class OrderIntentAdmin(admin.ModelAdmin):
         '''
 
         for item in items:
+            unit_price_str = f'{int(item.unit_price):,}'
+            total_price_str = f'{int(item.total_price):,}'
             html += f'''
                 <tr style="border-bottom: 1px solid #e0e0e0;">
                     <td style="padding: 8px;">{item.listing.title}</td>
                     <td style="padding: 8px; text-align: center;">{item.quantity}</td>
-                    <td style="padding: 8px; text-align: right;">UGX {int(item.unit_price):,}</td>
-                    <td style="padding: 8px; text-align: right;">UGX {int(item.total_price):,}</td>
+                    <td style="padding: 8px; text-align: right;">UGX {unit_price_str}</td>
+                    <td style="padding: 8px; text-align: right;">UGX {total_price_str}</td>
                 </tr>
             '''
 
         html += '</tbody></table>'
 
         # Summary
+        delivery_fee_str = f'{int(obj.delivery_fee or 0):,}'
+        total_amount_str = f'{int(obj.total_amount):,}'
         html += '<div style="margin-top: 16px; padding: 12px; background: #f9f9f9; border-radius: 4px;">'
-        html += f'<strong>Delivery Fee:</strong> UGX {int(obj.delivery_fee or 0):,}<br>'
-        html += f'<strong style="font-size: 16px; color: #E60549;">Total Amount:</strong> <span style="font-size: 18px; color: #E60549;">UGX {int(obj.total_amount):,}</span>'
+        html += f'<strong>Delivery Fee:</strong> UGX {delivery_fee_str}<br>'
+        html += f'<strong style="font-size: 16px; color: #E60549;">Total Amount:</strong> <span style="font-size: 18px; color: #E60549;">UGX {total_amount_str}</span>'
         html += '</div>'
 
         html += '</div>'
@@ -483,17 +490,16 @@ class OrderIntentItemAdmin(admin.ModelAdmin):
 
     def unit_price_display(self, obj):
         """Display unit price with currency"""
-        return f'UGX {int(obj.unit_price):,}'
+        price_str = f'{int(obj.unit_price):,}'
+        return f'UGX {price_str}'
 
     unit_price_display.short_description = 'Unit Price'
     unit_price_display.admin_order_field = 'unit_price'
 
     def total_price_display(self, obj):
         """Display total price with currency"""
-        return format_html(
-            '<strong>UGX {:,}</strong>',
-            int(obj.total_price)
-        )
+        price_str = f'{int(obj.total_price):,}'
+        return format_html('<strong>UGX {}</strong>', price_str)
 
     total_price_display.short_description = 'Total'
     total_price_display.admin_order_field = 'total_price'
