@@ -8,6 +8,25 @@ from django.utils import timezone
 from .models import OrderGroup, OrderIntent, OrderIntentItem
 
 
+class OrderGroupFilter(admin.SimpleListFilter):
+    """Custom filter for orders with/without group"""
+    title = 'order group'
+    parameter_name = 'has_group'
+
+    def lookups(self, request, model_admin):
+        return (
+            ('yes', 'Part of Group'),
+            ('no', 'Single Order'),
+        )
+
+    def queryset(self, request, queryset):
+        if self.value() == 'yes':
+            return queryset.filter(order_group__isnull=False)
+        if self.value() == 'no':
+            return queryset.filter(order_group__isnull=True)
+        return queryset
+
+
 class OrderIntentItemInline(admin.TabularInline):
     """Inline for OrderIntentItems in OrderIntent admin"""
     model = OrderIntentItem
@@ -185,7 +204,7 @@ class OrderIntentAdmin(admin.ModelAdmin):
         'status',
         'created_at',
         'merchant',
-        'order_group__isnull',
+        OrderGroupFilter,  # Use custom filter instead of order_group__isnull
     )
     search_fields = (
         'order_number',
