@@ -5,10 +5,10 @@ from rest_framework.permissions import IsAuthenticated
 from django.db import transaction
 from django.shortcuts import get_object_or_404
 
-from .models import OrderIntent, OrderIntentItem
+from .models import OrderIntent, OrderIntentItem, OrderGroup
 from .serializers import (
     OrderIntentSerializer,
-    CheckoutRequestSerializer
+    CheckoutRequestSerializer, OrderGroupSerializer
 )
 from kakebe_apps.cart.models import Cart
 from kakebe_apps.location.models import UserAddress
@@ -69,8 +69,19 @@ class OrderViewSet(viewsets.ModelViewSet):
 
             # Create orders (one per merchant)
             orders = []
+            order_group = None
+            total_group_amount = 0
 
             with transaction.atomic():
+                # Create OrderGroup if multiple merchants
+                if len(grouped_items) > 1:
+                    order_group = OrderGroup.objects.create(
+                        group_number=OrderGroup.generate_group_number(),
+                        buyer=user,
+                        total_amount=0,  # Will update after creating orders
+                        total_orders=len(grouped_items)
+                    )
+
                 for merchant, items in grouped_items.items():
                     # Calculate total for this merchant's items
                     items_total = sum(
@@ -80,6 +91,7 @@ class OrderViewSet(viewsets.ModelViewSet):
 
                     delivery_fee = serializer.validated_data.get('delivery_fee', 0)
                     total_amount = items_total + (delivery_fee or 0)
+                    total_group_amount += total_amount
 
                     # Create order
                     order = OrderIntent.objects.create(
@@ -91,7 +103,8 @@ class OrderViewSet(viewsets.ModelViewSet):
                         total_amount=total_amount,
                         delivery_fee=delivery_fee,
                         expected_delivery_date=serializer.validated_data.get('expected_delivery_date'),
-                        status='NEW'
+                        status='NEW',
+                        order_group=order_group  # Link to group
                     )
 
                     # Create order items
@@ -110,6 +123,11 @@ class OrderViewSet(viewsets.ModelViewSet):
                     OrderIntentItem.objects.bulk_create(order_items)
                     orders.append(order)
 
+                # Update order group total
+                if order_group:
+                    order_group.total_amount = total_group_amount
+                    order_group.save(update_fields=['total_amount'])
+
                 # Clear cart after successful order creation
                 cart.clear_cart()
 
@@ -119,7 +137,13 @@ class OrderViewSet(viewsets.ModelViewSet):
             return Response(
                 {
                     'message': 'Order(s) placed successfully',
-                    'orders': serialized_orders.data
+                    'orders': serialized_orders.data,
+                    'order_group': {
+                        'id': str(order_group.id) if order_group else None,
+                        'group_number': order_group.group_number if order_group else None,
+                        'total_orders': len(orders),
+                        'total_amount': str(total_group_amount)
+                    } if order_group else None
                 },
                 status=status.HTTP_201_CREATED
             )
@@ -134,7 +158,6 @@ class OrderViewSet(viewsets.ModelViewSet):
                 {'error': str(e)},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
-
     @action(detail=True, methods=['post'], url_path='cancel')
     def cancel_order(self, request, pk=None):
         """Cancel an order"""
@@ -153,3 +176,19 @@ class OrderViewSet(viewsets.ModelViewSet):
 
         serializer = self.get_serializer(order)
         return Response(serializer.data)
+
+
+class OrderGroupViewSet(viewsets.ReadOnlyModelViewSet):
+    """
+    ViewSet for viewing order groups
+    """
+    serializer_class = OrderGroupSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        return OrderGroup.objects.filter(
+            buyer=self.request.user
+        ).prefetch_related(
+            'orders__merchant',
+            'orders__items__listing'
+        ).order_by('-created_at')
