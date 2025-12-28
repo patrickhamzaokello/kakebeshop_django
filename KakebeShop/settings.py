@@ -312,7 +312,7 @@ LOGGING = {
         'file': {
             'level': 'INFO',
             'class': 'logging.FileHandler',
-            'filename': 'kakebe_shop_logs.log',
+            'filename': 'logs/kakebe_shop_logs.log',
             'formatter': 'verbose',
         },
         'notification_file': {
