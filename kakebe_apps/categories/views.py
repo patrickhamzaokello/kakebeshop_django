@@ -29,7 +29,7 @@ class CategoryViewSet(viewsets.ReadOnlyModelViewSet):
     - subcategories: paginated subcategories of a parent
     """
     permission_classes = [permissions.AllowAny]
-    lookup_field = 'id'
+    lookup_field = 'slug'
     filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
     search_fields = ['name', 'description']
     ordering_fields = ['name', 'sort_order', 'created_at']
@@ -94,14 +94,20 @@ class CategoryViewSet(viewsets.ReadOnlyModelViewSet):
         serializer = CategoryTreeSerializer(categories, many=True)
         return Response(serializer.data)
 
-    @action(detail=True, methods=['get'])
-    def subcategories(self, request, slug=None):
+    @action(detail=False, methods=['get'], url_path='subcategories/(?P<parent_id>[^/.]+)')
+    def subcategories(self, request, parent_id=None):
         """
-        Get paginated subcategories of a specific parent category
-        Query: /api/categories/{id}/subcategories/
+        Get paginated subcategories of a specific parent category by ID
+        Query: /api/categories/subcategories/{parent_id}/
         Supports pagination, search, and ordering
         """
-        parent = self.get_object()
+        try:
+            parent = Category.objects.get(id=parent_id, is_active=True)
+        except Category.DoesNotExist:
+            return Response(
+                {'error': 'Parent category not found'},
+                status=status.HTTP_404_NOT_FOUND
+            )
 
         queryset = Category.objects.filter(
             is_active=True,
@@ -149,7 +155,7 @@ class TagViewSet(viewsets.ReadOnlyModelViewSet):
     queryset = Tag.objects.all().order_by('name')
     serializer_class = TagSerializer
     permission_classes = [permissions.AllowAny]
-    lookup_field = 'id'
+    lookup_field = 'slug'
     filter_backends = [DjangoFilterBackend, filters.SearchFilter]
     search_fields = ['name', 'slug']
     pagination_class = StandardResultsSetPagination

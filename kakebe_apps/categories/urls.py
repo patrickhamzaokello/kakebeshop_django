@@ -45,7 +45,7 @@ CATEGORIES:
    GET /api/categories/smartphones/
 
 6. Get subcategories of a category (paginated)
-   GET /api/categories/<slug>/subcategories/
+   GET /api/categories/subcategories/<parent_id>
    GET /api/categories/electronics/subcategories/
    GET /api/categories/electronics/subcategories/?page=1&page_size=10
    GET /api/categories/electronics/subcategories/?search=phone
