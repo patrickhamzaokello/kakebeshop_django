@@ -29,7 +29,7 @@ class CategoryViewSet(viewsets.ReadOnlyModelViewSet):
     - subcategories: paginated subcategories of a parent
     """
     permission_classes = [permissions.AllowAny]
-    lookup_field = 'slug'
+    lookup_field = 'id'
     filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
     search_fields = ['name', 'description']
     ordering_fields = ['name', 'sort_order', 'created_at']
@@ -98,7 +98,7 @@ class CategoryViewSet(viewsets.ReadOnlyModelViewSet):
     def subcategories(self, request, slug=None):
         """
         Get paginated subcategories of a specific parent category
-        Query: /api/categories/{slug}/subcategories/
+        Query: /api/categories/{id}/subcategories/
         Supports pagination, search, and ordering
         """
         parent = self.get_object()
@@ -149,7 +149,7 @@ class TagViewSet(viewsets.ReadOnlyModelViewSet):
     queryset = Tag.objects.all().order_by('name')
     serializer_class = TagSerializer
     permission_classes = [permissions.AllowAny]
-    lookup_field = 'slug'
+    lookup_field = 'id'
     filter_backends = [DjangoFilterBackend, filters.SearchFilter]
     search_fields = ['name', 'slug']
     pagination_class = StandardResultsSetPagination
