@@ -4,7 +4,7 @@ from rest_framework import serializers
 from django.contrib.auth import get_user_model
 
 from .models import (
-     SavedSearch, Conversation, Message, Notification,
+     SavedSearch, Conversation, Message,
     ListingReview, MerchantReview, Report, FollowUpRule, FollowUpLog,
     AdminUser, AuditLog, ApiUsage, ActivityLog, MerchantScore, PushToken
 )
@@ -60,12 +60,6 @@ class ConversationSerializer(serializers.ModelSerializer):
         user = self.context['request'].user
         return obj.messages.filter(is_read=False).exclude(sender=user).count()
 
-
-class NotificationSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = Notification
-        fields = '__all__'
-        read_only_fields = ['type', 'title', 'body', 'data', 'action_url', 'created_at']
 
 
 class ListingReviewSerializer(serializers.ModelSerializer):

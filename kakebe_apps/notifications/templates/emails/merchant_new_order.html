@@ -1,0 +1,47 @@
+<!-- kakebe_apps/notifications/templates/emails/merchant_new_order.html -->
+{% extends "emails/base.html" %}
+
+{% block content %}
+<h2>New Order Received! 🛍️</h2>
+
+<p>Hi {{ user.name|default:user.email }},</p>
+
+<p>Great news! You have received a new order on your Kakebe merchant account.</p>
+
+<div class="info-box">
+    <div class="info-row">
+        <span class="info-label">Order Number</span>
+        <span class="info-value">{{ metadata.order_number }}</span>
+    </div>
+    <div class="info-row">
+        <span class="info-label">Customer</span>
+        <span class="info-value">{{ metadata.buyer_name }}</span>
+    </div>
+    <div class="info-row">
+        <span class="info-label">Order Value</span>
+        <span class="info-value" style="color: #E60549;">UGX {{ metadata.total_amount }}</span>
+    </div>
+    <div class="info-row">
+        <span class="info-label">Items</span>
+        <span class="info-value">{{ metadata.items_count }} item{{ metadata.items_count|pluralize }}</span>
+    </div>
+</div>
+
+<p><strong>Action Required:</strong></p>
+<p>
+    Please review the order details and contact the customer to confirm:
+</p>
+<ul style="color: #666; font-size: 15px; line-height: 24px;">
+    <li>Product availability</li>
+    <li>Delivery timeline</li>
+    <li>Any special requirements</li>
+</ul>
+
+<a href="{{ site_url }}/merchant/orders/{{ notification.order_id }}" class="button">
+    View Order Details
+</a>
+
+<p style="font-size: 13px; color: #999; margin-top: 30px;">
+    <strong>Tip:</strong> Quick response times lead to better customer satisfaction and more orders!
+</p>
+{% endblock %}

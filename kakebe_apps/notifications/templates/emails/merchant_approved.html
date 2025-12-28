@@ -1,0 +1,44 @@
+<!-- kakebe_apps/notifications/templates/emails/merchant_approved.html -->
+{% extends "emails/base.html" %}
+
+{% block content %}
+<h2>Congratulations! Your Merchant Account is Approved! 🎉</h2>
+
+<p>Hi {{ user.name|default:user.email }},</p>
+
+<p>We're excited to inform you that your merchant account application has been approved!</p>
+
+<div class="info-box">
+    <div class="info-row">
+        <span class="info-label">Business Name</span>
+        <span class="info-value">{{ metadata.business_name }}</span>
+    </div>
+    <div class="info-row">
+        <span class="info-label">Display Name</span>
+        <span class="info-value">{{ metadata.display_name }}</span>
+    </div>
+    <div class="info-row">
+        <span class="info-label">Status</span>
+        <span class="info-value" style="color: #4CAF50;">{{ metadata.status }}</span>
+    </div>
+</div>
+
+<p><strong>You can now:</strong></p>
+<ul style="color: #666; font-size: 15px; line-height: 24px;">
+    <li>✅ Create and publish product listings</li>
+    <li>✅ Manage your inventory</li>
+    <li>✅ Receive and fulfill orders</li>
+    <li>✅ Track your sales and earnings</li>
+    <li>✅ Build your customer base</li>
+</ul>
+
+<a href="{{ site_url }}/merchant/dashboard" class="button">
+    Go to Merchant Dashboard
+</a>
+
+<p style="font-size: 13px; color: #999; margin-top: 30px;">
+    <strong>Need help getting started?</strong><br>
+    Check out our <a href="{{ site_url }}/merchant/guide" style="color: #E60549;">Merchant Guide</a>
+    for tips on creating great listings and growing your business.
+</p>
+{% endblock %}

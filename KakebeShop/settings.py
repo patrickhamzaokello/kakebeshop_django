@@ -72,6 +72,7 @@ LOCAL_APPS = [
     'kakebe_apps.merchants',
     'kakebe_apps.promotions',
     'kakebe_apps.transactions',
+    'kakebe_apps.notifications',
 ]
 
 INSTALLED_APPS = DJANGO_APPS + THIRD_PARTY_APPS + LOCAL_APPS
@@ -137,31 +138,28 @@ DATABASES = {
 CELERY_BROKER_URL = config('REDIS_DATABASE_SERVER_HOST')
 CELERY_RESULT_BACKEND = config('REDIS_DATABASE_SERVER_HOST')
 # Celery task settings
-CELERY_TASK_SERIALIZER = 'json'
-CELERY_RESULT_SERIALIZER = 'json'
-CELERY_ACCEPT_CONTENT = ['json']
-CELERy_TASK_TIME_LIMIT = 7200,  # 2 hours max per task
-CELERY_TASK_STARTED = True
-CELERY_SOFT_TIME_LIMIT = 6900,  # Soft limit at 1h 55m
-CELERY_TIMEZONE = 'UTC'
-CELERY_ENABLE_UTC = True
-
 CELERY_TASK_DEFAULT_QUEUE = 'kakebeshop_tasks'
 CELERY_RESULT_BACKEND_TRANSPORT_OPTIONS = {
     'result_chord_prefix': 'kakebeshop-chord-',
 }
 
-# Celery Beat settings
+# Celery Configuration
+CELERY_ACCEPT_CONTENT = ['json']
+CELERY_TASK_SERIALIZER = 'json'
+CELERY_RESULT_SERIALIZER = 'json'
+CELERY_TIMEZONE = 'UTC'
+CELERY_ENABLE_UTC = True
+
+# Celery Beat (Scheduler)
 CELERY_BEAT_SCHEDULER = 'django_celery_beat.schedulers:DatabaseScheduler'
 
-# Task routing
-CELERY_TASK_ROUTES = {
+# Task time limits
+CELERY_TASK_TIME_LIMIT = 30 * 60  # 30 minutes
+CELERY_TASK_SOFT_TIME_LIMIT = 25 * 60  # 25 minutes
 
-}
-
-# Task time limits (30 minutes for scraping tasks)
-CELERY_TASK_TIME_LIMIT = 1800
-CELERY_TASK_SOFT_TIME_LIMIT = 1500
+# Worker configuration
+CELERY_WORKER_PREFETCH_MULTIPLIER = 4
+CELERY_WORKER_MAX_TASKS_PER_CHILD = 1000
 
 
 # File upload settings
@@ -271,6 +269,25 @@ COMPANY_NAME = 'KAKEBE SHOP'
 COMPANY_WEBSITE = 'https://kakebeshop.com'
 SUPPORT_EMAIL = 'support@kakebeshop.com'
 
+DEFAULT_FROM_EMAIL = config('DEFAULT_FROM_EMAIL', default='noreply@kakebeshop.com')
+
+
+
+
+# ============================================================================
+# PUSH NOTIFICATION CONFIGURATION
+# ============================================================================
+
+# External Push Notification Service
+PUSH_NOTIFICATION_API_URL = config('PUSH_NOTIFICATION_API_URL', default='')
+PUSH_NOTIFICATION_API_KEY = config('PUSH_NOTIFICATION_API_KEY', default='')
+
+
+# ============================================================================
+# FRONTEND URL
+# ============================================================================
+
+FRONTEND_URL = config('FRONTEND_URL', default='https://kakebeshop.com')
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
@@ -287,7 +304,7 @@ LOGGING = {
     'disable_existing_loggers': False,
     'formatters': {
         'verbose': {
-            'format': '{levelname} {asctime} {module} {process:d} {thread:d} {message}',
+            'format': '{levelname} {asctime} {module} {message}',
             'style': '{',
         },
     },
@@ -296,6 +313,12 @@ LOGGING = {
             'level': 'INFO',
             'class': 'logging.FileHandler',
             'filename': 'kakebe_shop_logs.log',
+            'formatter': 'verbose',
+        },
+        'notification_file': {
+            'level': 'INFO',
+            'class': 'logging.FileHandler',
+            'filename': 'logs/notifications.log',
             'formatter': 'verbose',
         },
         'console': {
@@ -313,6 +336,16 @@ LOGGING = {
         'django.core.mail': {
             'handlers': ['console'],
             'level': 'DEBUG',
+        },
+        'kakebe_apps.notifications': {
+            'handlers': ['notification_file', 'console'],
+            'level': 'INFO',
+            'propagate': False,
+        },
+        'celery': {
+            'handlers': ['notification_file', 'console'],
+            'level': 'INFO',
+            'propagate': False,
         },
     },
 }

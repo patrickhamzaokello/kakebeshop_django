@@ -9,13 +9,13 @@ from django.utils import timezone
 from django.db import models
 
 from .models import (
-    SavedSearch, Conversation, Message, Notification,
+    SavedSearch, Conversation, Message,
     ListingReview, MerchantReview, Report, MerchantScore,
     ActivityLog, AuditLog, ApiUsage, OnboardingStatus, UserIntent, PushToken
 )
 from .serializers import (
     SavedSearchSerializer, ConversationSerializer,
-    MessageSerializer, NotificationSerializer, ListingReviewSerializer,
+    MessageSerializer, ListingReviewSerializer,
     MerchantReviewSerializer, ReportSerializer, MerchantScoreSerializer,
     ActivityLogSerializer, AuditLogSerializer, ApiUsageSerializer, OnboardingStatusSerializer, UserIntentSerializer,
     PushTokenSerializer, PushTokenCreateSerializer, PushTokenUpdateUsageSerializer
@@ -63,25 +63,6 @@ class MessageViewSet(mixins.CreateModelMixin,
         conversation.last_message_at = timezone.now()
         conversation.save()
 
-
-class NotificationViewSet(viewsets.ModelViewSet):
-    serializer_class = NotificationSerializer
-    permission_classes = [IsAuthenticated]
-
-    def get_queryset(self):
-        return Notification.objects.filter(user=self.request.user)
-
-    @action(detail=False, methods=['post'])
-    def mark_all_read(self, request):
-        self.get_queryset().update(is_read=True)
-        return Response({'status': 'all read'})
-
-    @action(detail=True, methods=['post'])
-    def mark_read(self, request, pk=None):
-        notification = self.get_object()
-        notification.is_read = True
-        notification.save()
-        return Response({'status': 'read'})
 
 
 class ListingReviewViewSet(viewsets.ModelViewSet):

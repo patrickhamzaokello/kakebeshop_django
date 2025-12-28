@@ -1,0 +1,47 @@
+<!-- kakebe_apps/notifications/templates/emails/order_created.html -->
+{% extends "emails/base.html" %}
+
+{% block content %}
+<h2>Order Placed Successfully! 🎉</h2>
+
+<p>Hi {{ user.name|default:user.email }},</p>
+
+<p>Thank you for your order! We've received your order and it's being processed.</p>
+
+<div class="info-box">
+    <div class="info-row">
+        <span class="info-label">Order Number</span>
+        <span class="info-value">{{ metadata.order_number }}</span>
+    </div>
+    <div class="info-row">
+        <span class="info-label">Order Date</span>
+        <span class="info-value">{{ notification.created_at|date:"F d, Y" }}</span>
+    </div>
+    <div class="info-row">
+        <span class="info-label">Total Amount</span>
+        <span class="info-value" style="color: #E60549;">UGX {{ metadata.total_amount }}</span>
+    </div>
+    {% if metadata.merchant_name %}
+    <div class="info-row">
+        <span class="info-label">Merchant</span>
+        <span class="info-value">{{ metadata.merchant_name }}</span>
+    </div>
+    {% endif %}
+</div>
+
+<p><strong>What happens next?</strong></p>
+<p>
+    1. The merchant has been notified of your order<br>
+    2. They will contact you to confirm details<br>
+    3. Your order will be prepared and shipped<br>
+    4. You'll receive updates at every step
+</p>
+
+<a href="{{ site_url }}/orders/{{ notification.order_id }}" class="button">
+    View Order Details
+</a>
+
+<p style="font-size: 13px; color: #999; margin-top: 30px;">
+    If you have any questions about your order, please don't hesitate to contact our support team.
+</p>
+{% endblock %}

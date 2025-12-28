@@ -86,40 +86,6 @@ class Message(models.Model):
         return f"Message from {self.sender.name}"
 
 
-class Notification(models.Model):
-    TYPE_CHOICES = [
-        ('NEW_MESSAGE', 'New Message'),
-        ('ORDER_UPDATE', 'Order Update'),
-        ('LISTING_APPROVED', 'Listing Approved'),
-        ('LISTING_REJECTED', 'Listing Rejected'),
-        ('NEW_REVIEW', 'New Review'),
-        ('FOLLOW_UP', 'Follow Up'),
-        ('SYSTEM', 'System'),
-    ]
-
-    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='notifications')
-    type = models.CharField(max_length=30, choices=TYPE_CHOICES)
-    title = models.CharField(max_length=255)
-    body = models.TextField()
-    is_read = models.BooleanField(default=False, db_index=True)
-    data = models.JSONField(null=True, blank=True)
-    action_url = models.CharField(max_length=500, null=True, blank=True)
-    created_at = models.DateTimeField(auto_now_add=True, db_index=True)
-
-    class Meta:
-        db_table = 'notifications'
-        indexes = [
-            models.Index(fields=['user']),
-            models.Index(fields=['is_read']),
-            models.Index(fields=['created_at']),
-        ]
-        ordering = ['-created_at']
-
-    def __str__(self):
-        return f"{self.title} - {self.user.name}"
-
-
 class ListingReview(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     listing = models.ForeignKey(Listing, on_delete=models.CASCADE, related_name='reviews')

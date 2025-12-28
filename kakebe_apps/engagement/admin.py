@@ -7,7 +7,7 @@ from django.core.serializers.json import DjangoJSONEncoder
 from django.db.models import Count, Avg, F
 import json
 from .models import (
-    SavedSearch, Conversation, Message, Notification,
+    SavedSearch, Conversation, Message,
     ListingReview, MerchantReview, MerchantScore, Report,
     FollowUpRule, FollowUpLog, AdminUser, AuditLog,
     ApiUsage, ActivityLog, OnboardingStatus, UserIntent, PushToken
@@ -254,82 +254,6 @@ class MessageAdmin(admin.ModelAdmin):
         return format_html('<span style="color: orange;">● Unread</span>')
 
     read_status.short_description = "Status"
-
-
-# ========== Notification Admin ==========
-@admin.register(Notification)
-class NotificationAdmin(admin.ModelAdmin):
-    list_display = ('user_link', 'type_badge', 'title_preview', 'read_status', 'created_at')
-    list_filter = ('type', 'is_read', 'created_at')
-    search_fields = ('user__name', 'title', 'body')
-    list_per_page = 25
-    readonly_fields = ('id', 'created_at', 'user_link', 'formatted_data')
-    fieldsets = (
-        ('Recipient', {
-            'fields': ('user_link',)
-        }),
-        ('Notification Content', {
-            'fields': ('type', 'title', 'body')
-        }),
-        ('Additional Data', {
-            'fields': ('formatted_data', 'action_url'),
-            'classes': ('collapse',)
-        }),
-        ('Status', {
-            'fields': ('is_read',)
-        }),
-        ('Metadata', {
-            'fields': ('created_at',),
-            'classes': ('collapse',)
-        })
-    )
-
-    def user_link(self, obj):
-        url = reverse('admin:authentication_user_change', args=[obj.user.id])
-        return format_html('<a href="{}">{}</a>', url, obj.user.name)
-
-    user_link.short_description = "User"
-
-    def type_badge(self, obj):
-        colors = {
-            'NEW_MESSAGE': '#2196F3',
-            'ORDER_UPDATE': '#4CAF50',
-            'LISTING_APPROVED': '#8BC34A',
-            'LISTING_REJECTED': '#F44336',
-            'NEW_REVIEW': '#FF9800',
-            'FOLLOW_UP': '#9C27B0',
-            'SYSTEM': '#607D8B',
-        }
-        return format_html(
-            '<span style="background: {}; color: white; padding: 2px 8px; border-radius: 10px; font-size: 11px;">{}</span>',
-            colors.get(obj.type, '#999'), obj.get_type_display()
-        )
-
-    type_badge.short_description = "Type"
-
-    def title_preview(self, obj):
-        return obj.title[:40] + "..." if len(obj.title) > 40 else obj.title
-
-    title_preview.short_description = "Title"
-
-    def read_status(self, obj):
-        if obj.is_read:
-            return format_html('<span style="color: #999;">✓</span>')
-        return format_html('<span style="color: #2196F3; font-weight: bold;">●</span>')
-
-    read_status.short_description = "Read"
-
-    def formatted_data(self, obj):
-        if obj.data:
-            try:
-                formatted = json.dumps(obj.data, indent=2, cls=DjangoJSONEncoder)
-                return format_html('<pre style="background: #f5f5f5; padding: 10px; border-radius: 5px;">{}</pre>',
-                                   formatted)
-            except:
-                return str(obj.data)
-        return "No additional data"
-
-    formatted_data.short_description = "Data (JSON)"
 
 
 # ========== ListingReview Admin ==========

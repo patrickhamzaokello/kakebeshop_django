@@ -1,0 +1,29 @@
+<!-- kakebe_apps/notifications/templates/emails/generic_notification.html -->
+{% extends "emails/base.html" %}
+
+{% block content %}
+<h2>{{ title }}</h2>
+
+<p>Hi {{ user.name|default:user.email }},</p>
+
+<p>{{ message }}</p>
+
+{% if metadata %}
+<div class="info-box">
+    {% for key, value in metadata.items %}
+    <div class="info-row">
+        <span class="info-label">{{ key|title }}</span>
+        <span class="info-value">{{ value }}</span>
+    </div>
+    {% endfor %}
+</div>
+{% endif %}
+
+<a href="{{ site_url }}" class="button">
+    Visit Kakebe
+</a>
+
+<p style="font-size: 13px; color: #999; margin-top: 30px;">
+    If you have any questions, please contact our support team.
+</p>
+{% endblock %}
