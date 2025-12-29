@@ -1,186 +1,223 @@
-from rest_framework import status, viewsets
+# kakebe_apps/orders/views.py (add these to your existing views)
+from rest_framework import viewsets, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
-from django.db import transaction
 from django.shortcuts import get_object_or_404
 
-from .models import OrderIntent, OrderIntentItem, OrderGroup
-from .serializers import (
-    OrderIntentSerializer,
-    CheckoutRequestSerializer, OrderGroupSerializer
-)
-from kakebe_apps.cart.models import Cart
-from kakebe_apps.location.models import UserAddress
+from .models import OrderIntent, OrderGroup
+from .serializers import OrderIntentSerializer, OrderGroupSerializer
+from kakebe_apps.notifications.services import NotificationService
+from kakebe_apps.notifications.models import NotificationType
 
 
-class OrderViewSet(viewsets.ModelViewSet):
+class OrderStatusUpdateMixin:
+    """Mixin for handling order status updates with notifications"""
+
+    def send_status_notification(self, order, old_status, new_status):
+        """Send notification when order status changes"""
+
+        # Map status to notification type
+        notification_map = {
+            'CONTACTED': NotificationType.ORDER_CONTACTED,
+            'CONFIRMED': NotificationType.ORDER_CONFIRMED,
+            'COMPLETED': NotificationType.ORDER_COMPLETED,
+            'CANCELLED': NotificationType.ORDER_CANCELLED,
+        }
+
+        notification_type = notification_map.get(new_status)
+
+        if notification_type:
+            # Notify the buyer
+            NotificationService.create_order_notification(
+                user=order.buyer,
+                order=order,
+                notification_type=notification_type,
+            )
+
+
+class OrderIntentViewSet(OrderStatusUpdateMixin, viewsets.ModelViewSet):
+    """
+    ViewSet for OrderIntent
+
+    Endpoints:
+    - list: Get all orders for current user
+    - retrieve: Get single order
+    - create: Create new order (handled by cart checkout)
+    - update_status: Update order status (merchant only)
+    - cancel: Cancel order (buyer only)
+    """
     serializer_class = OrderIntentSerializer
     permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
+        user = self.request.user
+
+        # If user is a merchant, show their orders
+        if hasattr(user, 'merchant_profile'):
+            return OrderIntent.objects.filter(
+                merchant=user.merchant_profile
+            ).select_related('buyer', 'merchant', 'group').prefetch_related('items')
+
+        # Otherwise show user's orders as buyer
         return OrderIntent.objects.filter(
-            buyer=self.request.user
-        ).select_related(
-            'buyer', 'merchant', 'address'
-        ).prefetch_related(
-            'items__listing'
-        ).order_by('-created_at')
+            buyer=user
+        ).select_related('buyer', 'merchant', 'group').prefetch_related('items')
 
-    @action(detail=False, methods=['post'], url_path='checkout')
-    def checkout(self, request):
+    @action(detail=True, methods=['post'])
+    def update_status(self, request, pk=None):
         """
-        Create order from cart items
+        Update order status (merchant only)
+
+        POST /api/v1/orders/orders/{id}/update_status/
+        {
+          "status": "CONTACTED",
+          "notes": "Called customer to confirm delivery address"
+        }
+
+        Valid statuses: NEW, CONTACTED, CONFIRMED, COMPLETED, CANCELLED
         """
-        serializer = CheckoutRequestSerializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
-
-        user = request.user
-
-        try:
-            # Get user's cart
-            cart = Cart.objects.prefetch_related(
-                'items__listing__merchant'
-            ).get(user=user)
-
-            if not cart.items.exists():
-                return Response(
-                    {'error': 'Cart is empty'},
-                    status=status.HTTP_400_BAD_REQUEST
-                )
-
-            # Validate cart items
-            validation_errors = cart.validate_items()
-            if validation_errors:
-                return Response(
-                    {'error': 'Some items are no longer available', 'details': validation_errors},
-                    status=status.HTTP_400_BAD_REQUEST
-                )
-
-            # Get and validate address
-            address = get_object_or_404(
-                UserAddress,
-                id=serializer.validated_data['address_id'],
-                user=user
-            )
-
-            # Group items by merchant
-            grouped_items = cart.group_items_by_merchant()
-
-            # Create orders (one per merchant)
-            orders = []
-            order_group = None
-            total_group_amount = 0
-
-            with transaction.atomic():
-                # Create OrderGroup if multiple merchants
-                if len(grouped_items) > 1:
-                    order_group = OrderGroup.objects.create(
-                        group_number=OrderGroup.generate_group_number(),
-                        buyer=user,
-                        total_amount=0,  # Will update after creating orders
-                        total_orders=len(grouped_items)
-                    )
-
-                for merchant, items in grouped_items.items():
-                    # Calculate total for this merchant's items
-                    items_total = sum(
-                        item.listing.price * item.quantity
-                        for item in items
-                    )
-
-                    delivery_fee = serializer.validated_data.get('delivery_fee', 0)
-                    total_amount = items_total + (delivery_fee or 0)
-                    total_group_amount += total_amount
-
-                    # Create order
-                    order = OrderIntent.objects.create(
-                        order_number=OrderIntent.generate_order_number(),
-                        buyer=user,
-                        merchant=merchant,
-                        address=address,
-                        notes=serializer.validated_data.get('notes', ''),
-                        total_amount=total_amount,
-                        delivery_fee=delivery_fee,
-                        expected_delivery_date=serializer.validated_data.get('expected_delivery_date'),
-                        status='NEW',
-                        order_group=order_group  # Link to group
-                    )
-
-                    # Create order items
-                    order_items = []
-                    for cart_item in items:
-                        order_items.append(
-                            OrderIntentItem(
-                                order_intent=order,
-                                listing=cart_item.listing,
-                                quantity=cart_item.quantity,
-                                unit_price=cart_item.listing.price,
-                                total_price=cart_item.listing.price * cart_item.quantity
-                            )
-                        )
-
-                    OrderIntentItem.objects.bulk_create(order_items)
-                    orders.append(order)
-
-                # Update order group total
-                if order_group:
-                    order_group.total_amount = total_group_amount
-                    order_group.save(update_fields=['total_amount'])
-
-                # Clear cart after successful order creation
-                cart.clear_cart()
-
-            # Serialize and return orders
-            serialized_orders = OrderIntentSerializer(orders, many=True)
-
-            return Response(
-                {
-                    'message': 'Order(s) placed successfully',
-                    'orders': serialized_orders.data,
-                    'order_group': {
-                        'id': str(order_group.id) if order_group else None,
-                        'group_number': order_group.group_number if order_group else None,
-                        'total_orders': len(orders),
-                        'total_amount': str(total_group_amount)
-                    } if order_group else None
-                },
-                status=status.HTTP_201_CREATED
-            )
-
-        except Cart.DoesNotExist:
-            return Response(
-                {'error': 'Cart not found'},
-                status=status.HTTP_404_NOT_FOUND
-            )
-        except Exception as e:
-            return Response(
-                {'error': str(e)},
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR
-            )
-    @action(detail=True, methods=['post'], url_path='cancel')
-    def cancel_order(self, request, pk=None):
-        """Cancel an order"""
         order = self.get_object()
 
-        if order.status not in ['NEW', 'CONTACTED']:
+        # Check if user is the merchant for this order
+        if not hasattr(request.user, 'merchant_profile') or order.merchant != request.user.merchant_profile:
             return Response(
-                {'error': 'Order cannot be cancelled at this stage'},
+                {
+                    'success': False,
+                    'error': 'Only the merchant can update order status'
+                },
+                status=status.HTTP_403_FORBIDDEN
+            )
+
+        new_status = request.data.get('status')
+        notes = request.data.get('notes', '')
+
+        # Validate status
+        valid_statuses = ['NEW', 'CONTACTED', 'CONFIRMED', 'COMPLETED', 'CANCELLED']
+        if new_status not in valid_statuses:
+            return Response(
+                {
+                    'success': False,
+                    'error': f'Invalid status. Must be one of: {", ".join(valid_statuses)}'
+                },
                 status=status.HTTP_400_BAD_REQUEST
             )
 
-        order.status = 'CANCELLED'
-        order.cancelled_by = 'BUYER'
-        order.cancellation_reason = request.data.get('reason', '')
+        # Store old status for notification
+        old_status = order.status
+
+        # Update order
+        order.status = new_status
+        if notes:
+            order.notes = notes
         order.save()
 
+        # Send notification if status changed
+        if old_status != new_status:
+            self.send_status_notification(order, old_status, new_status)
+
+        # Serialize and return
         serializer = self.get_serializer(order)
-        return Response(serializer.data)
+        return Response({
+            'success': True,
+            'message': f'Order status updated to {new_status}',
+            'data': serializer.data
+        })
+
+    @action(detail=True, methods=['post'])
+    def cancel(self, request, pk=None):
+        """
+        Cancel order (buyer only, before CONFIRMED)
+
+        POST /api/v1/orders/orders/{id}/cancel/
+        {
+          "reason": "Changed my mind"
+        }
+        """
+        order = self.get_object()
+
+        # Check if user is the buyer
+        if order.buyer != request.user:
+            return Response(
+                {
+                    'success': False,
+                    'error': 'Only the buyer can cancel their order'
+                },
+                status=status.HTTP_403_FORBIDDEN
+            )
+
+        # Check if order can be cancelled
+        if order.status in ['COMPLETED', 'CANCELLED']:
+            return Response(
+                {
+                    'success': False,
+                    'error': f'Cannot cancel order with status {order.status}'
+                },
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        # Update status
+        old_status = order.status
+        order.status = 'CANCELLED'
+
+        # Add cancellation reason to notes
+        reason = request.data.get('reason', 'No reason provided')
+        order.notes = f"Cancelled by buyer. Reason: {reason}"
+        order.save()
+
+        # Send notification
+        self.send_status_notification(order, old_status, 'CANCELLED')
+
+        # Serialize and return
+        serializer = self.get_serializer(order)
+        return Response({
+            'success': True,
+            'message': 'Order cancelled successfully',
+            'data': serializer.data
+        })
+
+    @action(detail=False, methods=['get'])
+    def my_orders(self, request):
+        """
+        Get orders with filtering options
+
+        GET /api/v1/orders/orders/my_orders/?status=CONFIRMED&role=buyer
+
+        Query params:
+        - status: Filter by status (NEW, CONTACTED, CONFIRMED, COMPLETED, CANCELLED)
+        - role: 'buyer' or 'merchant'
+        """
+        queryset = self.get_queryset()
+
+        # Filter by status
+        order_status = request.query_params.get('status')
+        if order_status:
+            queryset = queryset.filter(status=order_status.upper())
+
+        # Filter by role
+        role = request.query_params.get('role')
+        if role == 'merchant' and hasattr(request.user, 'merchant_profile'):
+            queryset = OrderIntent.objects.filter(merchant=request.user.merchant_profile)
+        elif role == 'buyer':
+            queryset = OrderIntent.objects.filter(buyer=request.user)
+
+        # Serialize
+        serializer = self.get_serializer(queryset, many=True)
+        return Response({
+            'success': True,
+            'count': queryset.count(),
+            'data': serializer.data
+        })
 
 
-class OrderGroupViewSet(viewsets.ReadOnlyModelViewSet):
+class OrderGroupViewSet(OrderStatusUpdateMixin, viewsets.ReadOnlyModelViewSet):
     """
-    ViewSet for viewing order groups
+    ViewSet for OrderGroup
+
+    Endpoints:
+    - list: Get all order groups for current user
+    - retrieve: Get single order group with all orders
+    - update_status: Update status of all orders in group
     """
     serializer_class = OrderGroupSerializer
     permission_classes = [IsAuthenticated]
@@ -188,7 +225,82 @@ class OrderGroupViewSet(viewsets.ReadOnlyModelViewSet):
     def get_queryset(self):
         return OrderGroup.objects.filter(
             buyer=self.request.user
-        ).prefetch_related(
-            'orders__merchant',
-            'orders__items__listing'
-        ).order_by('-created_at')
+        ).prefetch_related('orders__items', 'orders__merchant')
+
+    @action(detail=True, methods=['post'])
+    def update_all_statuses(self, request, pk=None):
+        """
+        Update status of all orders in the group
+
+        POST /api/v1/orders/order-groups/{id}/update_all_statuses/
+        {
+          "status": "CANCELLED",
+          "notes": "Customer requested cancellation of entire order"
+        }
+
+        This updates all orders in the group to the same status
+        """
+        order_group = self.get_object()
+
+        # Only buyer can update group status
+        if order_group.buyer != request.user:
+            return Response(
+                {
+                    'success': False,
+                    'error': 'Only the buyer can update order group status'
+                },
+                status=status.HTTP_403_FORBIDDEN
+            )
+
+        new_status = request.data.get('status')
+        notes = request.data.get('notes', '')
+
+        # Validate status
+        valid_statuses = ['CANCELLED']  # Only cancellation for groups
+        if new_status not in valid_statuses:
+            return Response(
+                {
+                    'success': False,
+                    'error': 'Only CANCELLED status is allowed for order groups'
+                },
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        # Update all orders in the group
+        updated_count = 0
+        for order in order_group.orders.all():
+            if order.status not in ['COMPLETED', 'CANCELLED']:
+                old_status = order.status
+                order.status = new_status
+                if notes:
+                    order.notes = notes
+                order.save()
+
+                # Send notification for each order
+                self.send_status_notification(order, old_status, new_status)
+                updated_count += 1
+
+        # Serialize and return
+        serializer = self.get_serializer(order_group)
+        return Response({
+            'success': True,
+            'message': f'Updated {updated_count} orders to {new_status}',
+            'data': serializer.data
+        })
+
+    @action(detail=True, methods=['get'])
+    def orders(self, request, pk=None):
+        """
+        Get all orders in this group
+
+        GET /api/v1/orders/order-groups/{id}/orders/
+        """
+        order_group = self.get_object()
+        orders = order_group.orders.all()
+
+        serializer = OrderIntentSerializer(orders, many=True)
+        return Response({
+            'success': True,
+            'count': orders.count(),
+            'data': serializer.data
+        })
