@@ -33,12 +33,12 @@ class OrderIntentViewSet(viewsets.ModelViewSet):
         if hasattr(user, 'merchant_profile'):
             return OrderIntent.objects.filter(
                 merchant=user.merchant_profile
-            ).select_related('buyer', 'merchant', 'address', 'group').prefetch_related('items__listing')
+            ).select_related('buyer', 'merchant', 'address', 'order_group').prefetch_related('items__listing')
 
         # Otherwise show user's orders as buyer
         return OrderIntent.objects.filter(
             buyer=user
-        ).select_related('buyer', 'merchant', 'address', 'group').prefetch_related('items__listing').order_by(
+        ).select_related('buyer', 'merchant', 'address', 'order_group').prefetch_related('items__listing').order_by(
             '-created_at')
 
     @action(detail=False, methods=['post'], url_path='checkout')
