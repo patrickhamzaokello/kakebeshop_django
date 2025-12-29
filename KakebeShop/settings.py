@@ -34,8 +34,8 @@ GOOGLE_CLIENT_IDS = [
     ANDROID_GOOGLE_CLIENT_ID, # Android client
 ]
 
-APPLE_CLIENT_ID = "com.kakebeshop.kakeshopapp"
-APPLE_CLIENT_IDS = ["com.kakebeshop.kakeshopapp", "other.client.id"]  # List of valid client IDs
+APPLE_CLIENT_ID = "com.kakebe.shop.dev"
+APPLE_CLIENT_IDS = ["com.kakebe.shop.dev", "com.kakebe.shop"]  # List of valid client IDs
 
 CSRF_TRUSTED_ORIGINS = ["https://backend.kakebeshop.com"]
 

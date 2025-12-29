@@ -37,6 +37,7 @@ class Apple:
             # Convert JWK to RSA public key
             apple_public_key = RSAAlgorithm.from_jwk(json.dumps(key))
 
+
             # Get the audience (client ID) from settings
             audience = getattr(settings, 'APPLE_CLIENT_ID', None)
             if not audience:
