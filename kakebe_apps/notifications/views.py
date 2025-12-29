@@ -68,18 +68,18 @@ class NotificationViewSet(viewsets.ReadOnlyModelViewSet):
         })
 
 
-class NotificationPreferenceViewSet(viewsets.ModelViewSet):
+class NotificationPreferenceViewSet(viewsets.ViewSet):
     """
     ViewSet for managing notification preferences
 
-    retrieve: Get user's notification preferences
+    list: Get user's notification preferences
     update: Update notification preferences
+    partial_update: Partially update notification preferences
     add_device_token: Add a device token for push notifications
     remove_device_token: Remove a device token
     """
     serializer_class = UserNotificationPreferenceSerializer
     permission_classes = [IsAuthenticated]
-    http_method_names = ['get', 'put', 'patch']
 
     def get_object(self):
         """Get or create preferences for current user"""
@@ -91,8 +91,39 @@ class NotificationPreferenceViewSet(viewsets.ModelViewSet):
     def list(self, request):
         """Get current user's preferences"""
         preference = self.get_object()
-        serializer = self.get_serializer(preference)
-        return Response(serializer.data)
+        serializer = self.serializer_class(preference)
+        return Response({
+            'success': True,
+            'data': serializer.data
+        })
+
+    def retrieve(self, request, pk=None):
+        """Get preferences (same as list since it's always current user)"""
+        return self.list(request)
+
+    def update(self, request, pk=None):
+        """Full update of preferences"""
+        preference = self.get_object()
+        serializer = self.serializer_class(preference, data=request.data)
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        return Response({
+            'success': True,
+            'data': serializer.data,
+            'message': 'Preferences updated successfully'
+        })
+
+    def partial_update(self, request, pk=None):
+        """Partial update of preferences"""
+        preference = self.get_object()
+        serializer = self.serializer_class(preference, data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        return Response({
+            'success': True,
+            'data': serializer.data,
+            'message': 'Preferences updated successfully'
+        })
 
     @action(detail=False, methods=['post'])
     def add_device_token(self, request):
@@ -105,6 +136,7 @@ class NotificationPreferenceViewSet(viewsets.ModelViewSet):
         preference.add_device_token(token)
 
         return Response({
+            'success': True,
             'message': 'Device token added successfully',
             'device_tokens': preference.device_tokens
         })
@@ -120,6 +152,7 @@ class NotificationPreferenceViewSet(viewsets.ModelViewSet):
         preference.remove_device_token(token)
 
         return Response({
+            'success': True,
             'message': 'Device token removed successfully',
             'device_tokens': preference.device_tokens
         })
