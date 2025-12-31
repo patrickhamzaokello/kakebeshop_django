@@ -128,7 +128,7 @@ WSGI_APPLICATION = 'KakebeShop.wsgi.application'
 DATABASES = {
     'default': {
         'ENGINE': config('DB_DRIVER', default='django.db.backends.postgresql'),
-        'NAME': config('POSTGRES_DB'),
+        'NAME': config('KAKEBE_DB_NAME'),
         'USER': config('POSTGRES_USER'),
         'PASSWORD': config('POSTGRES_PASSWORD'),
         'HOST': config('PG_HOST'),
