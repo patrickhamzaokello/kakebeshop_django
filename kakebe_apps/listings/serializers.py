@@ -2,16 +2,10 @@
 
 from rest_framework import serializers
 from django.utils import timezone
-from .models import Listing, ListingTag, ListingImage, ListingBusinessHour
+from .models import Listing, ListingTag, ListingBusinessHour
 from kakebe_apps.categories.serializers import CategoryListSerializer as CategorySerializer, TagSerializer
 from kakebe_apps.merchants.serializers import MerchantListSerializer
 
-
-class ListingImageSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = ListingImage
-        fields = ['id', 'image', 'thumbnail', 'is_primary', 'sort_order', 'created_at']
-        read_only_fields = ['id', 'created_at']
 
 
 class ListingBusinessHourSerializer(serializers.ModelSerializer):
@@ -69,7 +63,6 @@ class ListingDetailSerializer(serializers.ModelSerializer):
     merchant = MerchantListSerializer(read_only=True)
     category = CategorySerializer(read_only=True)
     tags = TagSerializer(many=True, read_only=True)
-    images = ListingImageSerializer(many=True, read_only=True)
     business_hours = ListingBusinessHourSerializer(many=True, read_only=True)
     is_active = serializers.BooleanField(read_only=True)
 
@@ -82,7 +75,7 @@ class ListingDetailSerializer(serializers.ModelSerializer):
             'status', 'rejection_reason', 'is_verified', 'verified_at',
             'is_featured', 'featured_until', 'views_count', 'contact_count',
             'metadata', 'expires_at', 'created_at', 'updated_at',
-            'images', 'business_hours', 'is_active'
+            'business_hours', 'is_active'
         ]
         read_only_fields = [
             'id', 'merchant', 'is_verified', 'verified_at',
@@ -160,15 +153,7 @@ class ListingCreateSerializer(serializers.ModelSerializer):
             tags = Tag.objects.filter(id__in=tag_ids)
             listing.tags.set(tags)
 
-        # Add images
-        for idx, image_data in enumerate(images_data):
-            ListingImage.objects.create(
-                listing=listing,
-                image=image_data.get('image'),
-                thumbnail=image_data.get('thumbnail'),
-                is_primary=image_data.get('is_primary', idx == 0),
-                sort_order=image_data.get('sort_order', idx)
-            )
+
 
         # Add business hours
         for hours_data in business_hours_data:
@@ -229,16 +214,6 @@ class ListingUpdateSerializer(serializers.ModelSerializer):
         return instance
 
 
-class ListingImageCreateSerializer(serializers.ModelSerializer):
-    """Serializer for adding images to existing listings"""
-
-    class Meta:
-        model = ListingImage
-        fields = ['image', 'thumbnail', 'is_primary', 'sort_order']
-
-    def create(self, validated_data):
-        listing = self.context['listing']
-        return ListingImage.objects.create(listing=listing, **validated_data)
 
 
 class ListingBusinessHourCreateSerializer(serializers.ModelSerializer):

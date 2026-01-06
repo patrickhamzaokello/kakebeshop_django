@@ -3,14 +3,7 @@
 from django.contrib import admin
 from django.utils.html import format_html
 from django.utils import timezone
-from .models import Listing, ListingTag, ListingImage, ListingBusinessHour
-
-
-class ListingImageInline(admin.TabularInline):
-    model = ListingImage
-    extra = 1
-    fields = ['image', 'thumbnail', 'is_primary', 'sort_order']
-    readonly_fields = ['created_at']
+from .models import Listing, ListingTag, ListingBusinessHour
 
 
 class ListingBusinessHourInline(admin.TabularInline):
@@ -39,7 +32,7 @@ class ListingAdmin(admin.ModelAdmin):
         'created_at', 'updated_at', 'deleted_at'
     ]
     list_editable = ['status']
-    inlines = [ListingImageInline, ListingBusinessHourInline]
+    inlines = [ListingBusinessHourInline]
 
     fieldsets = (
         ('Basic Information', {
@@ -242,13 +235,6 @@ class ListingAdmin(admin.ModelAdmin):
 
     close_listings.short_description = 'Close selected listings'
 
-
-@admin.register(ListingImage)
-class ListingImageAdmin(admin.ModelAdmin):
-    list_display = ['listing', 'is_primary', 'sort_order', 'created_at']
-    list_filter = ['is_primary', 'created_at']
-    search_fields = ['listing__title']
-    readonly_fields = ['id', 'created_at']
 
 
 @admin.register(ListingBusinessHour)

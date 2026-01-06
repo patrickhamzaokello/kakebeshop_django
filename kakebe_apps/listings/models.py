@@ -4,6 +4,7 @@ from django.db import models
 from django.core.validators import MinValueValidator
 
 from kakebe_apps.categories.models import Category, Tag
+from kakebe_apps.imagehandler.models import ImageAsset
 from kakebe_apps.merchants.models import Merchant
 
 
@@ -127,7 +128,25 @@ class Listing(models.Model):
     @property
     def primary_image(self):
         """Get the primary image or first image"""
-        return self.images.filter(is_primary=True).first() or self.images.first()
+        first_group = (
+            ImageAsset.objects
+            .filter(
+                image_type="listing",
+                object_id=self.id,
+                is_confirmed=True
+            )
+            .order_by("order", "created_at")
+            .values_list("image_group_id", flat=True)
+            .first()
+        )
+
+        if not first_group:
+            return None
+
+        return ImageAsset.objects.filter(
+            image_group_id=first_group,
+            variant="medium"
+        ).first()
 
     def soft_delete(self):
         """Soft delete the listing"""
@@ -162,40 +181,6 @@ class ListingTag(models.Model):
 
     def __str__(self):
         return f"{self.listing.title} - {self.tag.name}"
-
-
-class ListingImage(models.Model):
-    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    listing = models.ForeignKey(
-        Listing,
-        on_delete=models.CASCADE,
-        related_name='images'
-    )
-    image = models.URLField()
-    thumbnail = models.URLField(null=True, blank=True)
-    is_primary = models.BooleanField(default=False)
-    sort_order = models.PositiveIntegerField(default=0)
-    created_at = models.DateTimeField(auto_now_add=True)
-
-    class Meta:
-        db_table = 'listing_images'
-        indexes = [
-            models.Index(fields=['listing', 'is_primary']),
-            models.Index(fields=['listing', 'sort_order']),
-        ]
-        ordering = ['sort_order', 'created_at']
-
-    def __str__(self):
-        return f"Image for {self.listing.title}"
-
-    def save(self, *args, **kwargs):
-        # If this is set as primary, unset other primary images for this listing
-        if self.is_primary:
-            ListingImage.objects.filter(
-                listing=self.listing,
-                is_primary=True
-            ).exclude(id=self.id).update(is_primary=False)
-        super().save(*args, **kwargs)
 
 
 class ListingBusinessHour(models.Model):

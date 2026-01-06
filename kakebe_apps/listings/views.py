@@ -7,14 +7,12 @@ from rest_framework.pagination import PageNumberPagination
 from django.shortcuts import get_object_or_404
 from django.db.models import Q
 from django.utils import timezone
-from .models import Listing, ListingImage, ListingBusinessHour
+from .models import Listing, ListingBusinessHour
 from .serializers import (
     ListingListSerializer,
     ListingDetailSerializer,
     ListingCreateSerializer,
     ListingUpdateSerializer,
-    ListingImageSerializer,
-    ListingImageCreateSerializer,
     ListingBusinessHourSerializer,
     ListingBusinessHourCreateSerializer
 )
@@ -306,27 +304,6 @@ class ListingViewSet(viewsets.ViewSet):
             status=status.HTTP_201_CREATED
         )
 
-    @action(
-        detail=True,
-        methods=['delete'],
-        url_path='remove_image/(?P<image_id>[^/.]+)',
-        permission_classes=[permissions.IsAuthenticated, HasMerchantProfile]
-    )
-    def remove_image(self, request, pk=None, image_id=None):
-        """Remove an image from listing"""
-        listing = get_object_or_404(
-            Listing,
-            pk=pk,
-            merchant=request.user.merchant_profile
-        )
-
-        image = get_object_or_404(ListingImage, pk=image_id, listing=listing)
-        image.delete()
-
-        return Response(
-            {'detail': 'Image removed successfully.'},
-            status=status.HTTP_204_NO_CONTENT
-        )
 
     @action(
         detail=True,
