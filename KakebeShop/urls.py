@@ -52,7 +52,9 @@ urlpatterns = [
         path('', include('kakebe_apps.engagement.urls')),
         path('', include('kakebe_apps.promotions.urls')),
 
-        path('', include('kakebe_apps.notifications.urls'))
+        path('', include('kakebe_apps.notifications.urls')),
+
+        path('', include('kakebe_apps.imagehandler.urls')),
 
     ])),
 

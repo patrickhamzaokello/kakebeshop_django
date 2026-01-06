@@ -22,6 +22,13 @@ TWILIO_ACCOUNT_SID = config('TWILIO_ACCOUNT_SID')
 TWILIO_AUTH_TOKEN = config('TWILIO_AUTH_TOKEN')
 TWILIO_VERIFY_SERVICE_SID = config('TWILIO_VERIFY_SERVICE_SID')
 
+AWS_REGION = config('AWS_REGION')
+AWS_S3_BUCKET_NAME = config('AWS_S3_BUCKET_NAME')
+AWS_S3_UPLOAD_EXPIRE_SECONDS = 300
+
+AWS_CLOUDFRONT_DOMAIN = config('AWS_CLOUDFRONT_DOMAIN')
+
+
 ALLOWED_HOSTS = [
     'backend.kakebeshop.com',
     'localhost',
@@ -73,6 +80,7 @@ LOCAL_APPS = [
     'kakebe_apps.promotions',
     'kakebe_apps.transactions',
     'kakebe_apps.notifications',
+    'kakebe_apps.imagehandler'
 ]
 
 INSTALLED_APPS = DJANGO_APPS + THIRD_PARTY_APPS + LOCAL_APPS
