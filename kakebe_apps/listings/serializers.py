@@ -133,7 +133,6 @@ class ListingCreateSerializer(serializers.ModelSerializer):
 
     def create(self, validated_data):
         tag_ids = validated_data.pop('tag_ids', [])
-        images_data = validated_data.pop('images_data', [])
         business_hours_data = validated_data.pop('business_hours_data', [])
 
         # Get merchant from request user
