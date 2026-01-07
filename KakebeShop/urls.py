@@ -54,7 +54,7 @@ urlpatterns = [
 
         path('', include('kakebe_apps.notifications.urls')),
 
-        path('', include('kakebe_apps.imagehandler.urls')),
+        path('image/', include('kakebe_apps.imagehandler.urls')),
 
     ])),
 
