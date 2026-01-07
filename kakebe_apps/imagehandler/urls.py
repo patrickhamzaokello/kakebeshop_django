@@ -1,7 +1,18 @@
 from django.urls import path
-from .views import PresignUploadView, ConfirmUploadView
+from .views import (
+    PresignUploadView,
+    ConfirmUploadView,
+    AttachImagesToObjectView,
+    ReorderImagesView,
+    CleanupAbandonedUploadsView,
+    MyDraftImagesView,
+)
 
 urlpatterns = [
-    path("uploads/presign/", PresignUploadView.as_view()),
-    path("uploads/confirm/", ConfirmUploadView.as_view()),
+    path('presign/', PresignUploadView.as_view(), name='presign-upload'),
+    path('confirm/', ConfirmUploadView.as_view(), name='confirm-upload'),
+    path('attach/', AttachImagesToObjectView.as_view(), name='attach-images'),
+    path('reorder/', ReorderImagesView.as_view(), name='reorder-images'),
+    path('cleanup/', CleanupAbandonedUploadsView.as_view(), name='cleanup-uploads'),
+    path('drafts/', MyDraftImagesView.as_view(), name='my-draft-images'),
 ]

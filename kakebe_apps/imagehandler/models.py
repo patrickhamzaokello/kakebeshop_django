@@ -25,11 +25,11 @@ class ImageAsset(models.Model):
         related_name="image_assets"
     )
 
-    # 🔑 WHAT THIS IMAGE BELONGS TO
-    object_id = models.UUIDField(db_index=True, null=True)
+    # NEW: Groups variants together (thumb/medium/large of same upload)
+    image_group_id = models.UUIDField(db_index=True)
 
-    # 🧩 GROUP VARIANTS OF THE SAME IMAGE
-    image_group_id = models.UUIDField(db_index=True,null=True)
+    # Can be null initially (draft uploads), set when listing is created
+    object_id = models.UUIDField(db_index=True, null=True, blank=True)
 
     image_type = models.CharField(max_length=20, choices=IMAGE_TYPES)
     variant = models.CharField(max_length=20, choices=VARIANT_CHOICES)
@@ -45,18 +45,21 @@ class ImageAsset(models.Model):
     is_confirmed = models.BooleanField(default=False)
 
     created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
+        db_table = 'image_assets'
         indexes = [
             models.Index(fields=["image_type", "object_id"]),
             models.Index(fields=["image_group_id"]),
+            models.Index(fields=["owner", "is_confirmed", "object_id"]),
+            models.Index(fields=["created_at"]),
         ]
         unique_together = (
             ("image_group_id", "variant"),
         )
 
     def cdn_url(self):
-        from django.conf import settings
         return f"{settings.AWS_CLOUDFRONT_DOMAIN}/{self.s3_key}"
 
     def __str__(self):
