@@ -9,6 +9,22 @@ class TagSerializer(serializers.ModelSerializer):
         read_only_fields = ['id', 'created_at', 'slug']
 
 
+class TagCreateSerializer(serializers.ModelSerializer):
+    """Serializer for creating tags"""
+
+    class Meta:
+        model = Tag
+        fields = ['name']
+
+    def validate_name(self, value):
+        """Ensure tag name is unique (case-insensitive)"""
+        if Tag.objects.filter(name__iexact=value).exists():
+            raise serializers.ValidationError(
+                f"Tag '{value}' already exists."
+            )
+        return value
+
+
 class CategoryListSerializer(serializers.ModelSerializer):
     """Lightweight serializer for list views without nested children"""
     children_count = serializers.SerializerMethodField()
@@ -98,3 +114,90 @@ class CategoryTreeSerializer(serializers.ModelSerializer):
     def get_children(self, obj):
         children_qs = obj.children.filter(is_active=True).order_by('sort_order', 'name')
         return CategoryTreeSerializer(children_qs, many=True, context=self.context).data
+
+
+class CategoryCreateSerializer(serializers.ModelSerializer):
+    """Serializer for creating categories"""
+
+    class Meta:
+        model = Category
+        fields = [
+            'name', 'icon', 'description', 'parent',
+            'allows_order_intent', 'allows_cart', 'is_contact_only',
+            'is_featured', 'sort_order', 'is_active'
+        ]
+
+    def validate_name(self, value):
+        """Ensure category name is unique (case-insensitive)"""
+        if Category.objects.filter(name__iexact=value).exists():
+            raise serializers.ValidationError(
+                f"Category '{value}' already exists."
+            )
+        return value
+
+    def validate_parent(self, value):
+        """Validate parent category"""
+        if value and not value.is_active:
+            raise serializers.ValidationError(
+                "Cannot set an inactive category as parent."
+            )
+        return value
+
+    def validate(self, attrs):
+        """Additional validation"""
+        # Prevent circular parent relationships
+        if attrs.get('parent'):
+            parent = attrs['parent']
+            # Check if parent has this category's parent as its parent (simple check)
+            # For deep checking, you'd need to traverse the tree
+            if parent.parent and parent.parent == self.instance:
+                raise serializers.ValidationError(
+                    "Cannot create circular parent relationship."
+                )
+        return attrs
+
+
+class CategoryUpdateSerializer(serializers.ModelSerializer):
+    """Serializer for updating categories"""
+
+    class Meta:
+        model = Category
+        fields = [
+            'name', 'icon', 'description', 'parent',
+            'allows_order_intent', 'allows_cart', 'is_contact_only',
+            'is_featured', 'sort_order', 'is_active'
+        ]
+
+    def validate_name(self, value):
+        """Ensure category name is unique except for current instance"""
+        if Category.objects.filter(name__iexact=value).exclude(id=self.instance.id).exists():
+            raise serializers.ValidationError(
+                f"Category '{value}' already exists."
+            )
+        return value
+
+    def validate_parent(self, value):
+        """Validate parent category"""
+        if value:
+            # Cannot set itself as parent
+            if value.id == self.instance.id:
+                raise serializers.ValidationError(
+                    "Category cannot be its own parent."
+                )
+
+            # Cannot set inactive category as parent
+            if not value.is_active:
+                raise serializers.ValidationError(
+                    "Cannot set an inactive category as parent."
+                )
+
+            # Check for circular reference (child becoming parent)
+            current = value
+            while current:
+                if current.id == self.instance.id:
+                    raise serializers.ValidationError(
+                        "Cannot create circular parent relationship."
+                    )
+                current = current.parent
+
+        return value
