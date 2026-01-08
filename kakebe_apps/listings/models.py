@@ -145,11 +145,24 @@ class Listing(models.Model):
         if not first_group:
             return None
 
-        # Get the medium variant of the first image group
+        # Get the THUMB variant of the first image group
         image_asset = ImageAsset.objects.filter(
             image_group_id=first_group,
-            variant="medium"
+            variant="thumb"
         ).first()
+
+        # If thumb variant doesn't exist, fall back to medium
+        if not image_asset:
+            image_asset = ImageAsset.objects.filter(
+                image_group_id=first_group,
+                variant="medium"
+            ).first()
+
+        # If medium doesn't exist, get any variant from the group
+        if not image_asset:
+            image_asset = ImageAsset.objects.filter(
+                image_group_id=first_group
+            ).first()
 
         if image_asset:
             return {
