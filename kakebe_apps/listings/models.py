@@ -167,7 +167,7 @@ class Listing(models.Model):
         if image_asset:
             return {
                 'id': str(image_asset.id),
-                'url': image_asset.cdn_url(),
+                'image': image_asset.cdn_url(),
                 'width': image_asset.width,
                 'height': image_asset.height,
                 'variant': image_asset.variant,
@@ -202,7 +202,7 @@ class Listing(models.Model):
             for img in group_images:
                 group_dict[img.variant] = {
                     'id': str(img.id),
-                    'url': img.cdn_url(),
+                    'image': img.cdn_url(),
                     'width': img.width,
                     'height': img.height,
                     'size_bytes': img.size_bytes,
