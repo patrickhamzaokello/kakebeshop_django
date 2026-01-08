@@ -5,7 +5,7 @@ from django.utils import timezone
 from .models import Listing, ListingTag, ListingBusinessHour
 from kakebe_apps.categories.serializers import CategoryListSerializer as CategorySerializer, TagSerializer
 from kakebe_apps.merchants.serializers import MerchantListSerializer
-
+from ..imagehandler.models import ImageAsset
 
 
 class ListingBusinessHourSerializer(serializers.ModelSerializer):
@@ -49,13 +49,7 @@ class ListingListSerializer(serializers.ModelSerializer):
         ]
 
     def get_primary_image(self, obj):
-        image = obj.primary_image
-        if image:
-            return {
-                'image': image.image,
-                'thumbnail': image.thumbnail
-            }
-        return None
+        return obj.primary_image
 
 
 class ListingDetailSerializer(serializers.ModelSerializer):
@@ -65,6 +59,7 @@ class ListingDetailSerializer(serializers.ModelSerializer):
     tags = TagSerializer(many=True, read_only=True)
     business_hours = ListingBusinessHourSerializer(many=True, read_only=True)
     is_active = serializers.BooleanField(read_only=True)
+    images = serializers.SerializerMethodField()
 
     class Meta:
         model = Listing
@@ -75,13 +70,16 @@ class ListingDetailSerializer(serializers.ModelSerializer):
             'status', 'rejection_reason', 'is_verified', 'verified_at',
             'is_featured', 'featured_until', 'views_count', 'contact_count',
             'metadata', 'expires_at', 'created_at', 'updated_at',
-            'business_hours', 'is_active'
+            'business_hours', 'is_active', 'images'
         ]
         read_only_fields = [
             'id', 'merchant', 'is_verified', 'verified_at',
             'is_featured', 'featured_until', 'views_count',
-            'contact_count', 'created_at', 'updated_at', 'is_active'
+            'contact_count', 'created_at', 'updated_at', 'is_active', 'images'
         ]
+
+    def get_images(self, obj):
+        return obj.images
 
 
 class ListingCreateSerializer(serializers.ModelSerializer):
@@ -91,10 +89,11 @@ class ListingCreateSerializer(serializers.ModelSerializer):
         write_only=True,
         required=False
     )
-    images_data = serializers.ListField(
-        child=serializers.DictField(),
+    image_group_ids = serializers.ListField(
+        child=serializers.UUIDField(),
         write_only=True,
-        required=False
+        required=False,
+        help_text="List of image group IDs to attach to this listing"
     )
     business_hours_data = serializers.ListField(
         child=serializers.DictField(),
@@ -108,7 +107,7 @@ class ListingCreateSerializer(serializers.ModelSerializer):
             'title', 'description', 'listing_type', 'category',
             'price_type', 'price', 'price_min',
             'price_max', 'currency', 'is_price_negotiable',
-            'tag_ids', 'images_data', 'business_hours_data', 'metadata'
+            'tag_ids', 'image_group_ids', 'business_hours_data', 'metadata'
         ]
 
     def validate(self, attrs):
@@ -129,10 +128,30 @@ class ListingCreateSerializer(serializers.ModelSerializer):
                     "Minimum price must be less than maximum price."
                 )
 
+        # Validate image groups if provided
+        image_group_ids = attrs.get('image_group_ids', [])
+        if image_group_ids:
+            user = self.context['request'].user
+
+            # Check ownership and availability of image groups
+            existing_groups = ImageAsset.objects.filter(
+                owner=user,
+                image_group_id__in=image_group_ids,
+                is_confirmed=False,
+                object_id__isnull=True
+            ).values_list('image_group_id', flat=True).distinct()
+
+            missing_groups = set(image_group_ids) - set(existing_groups)
+            if missing_groups:
+                raise serializers.ValidationError({
+                    'image_group_ids': f"Image groups not found or already assigned: {missing_groups}"
+                })
+
         return attrs
 
     def create(self, validated_data):
         tag_ids = validated_data.pop('tag_ids', [])
+        image_group_ids = validated_data.pop('image_group_ids', [])
         business_hours_data = validated_data.pop('business_hours_data', [])
 
         # Get merchant from request user
@@ -152,7 +171,14 @@ class ListingCreateSerializer(serializers.ModelSerializer):
             tags = Tag.objects.filter(id__in=tag_ids)
             listing.tags.set(tags)
 
-
+        # Attach images to listing
+        if image_group_ids:
+            ImageAsset.objects.filter(
+                image_group_id__in=image_group_ids
+            ).update(
+                object_id=listing.id,
+                is_confirmed=True
+            )
 
         # Add business hours
         for hours_data in business_hours_data:
@@ -163,13 +189,24 @@ class ListingCreateSerializer(serializers.ModelSerializer):
 
         return listing
 
-
 class ListingUpdateSerializer(serializers.ModelSerializer):
     """Serializer for updating listings by owner"""
     tag_ids = serializers.ListField(
         child=serializers.IntegerField(),
         write_only=True,
         required=False
+    )
+    add_image_group_ids = serializers.ListField(
+        child=serializers.UUIDField(),
+        write_only=True,
+        required=False,
+        help_text="List of image group IDs to add to this listing"
+    )
+    remove_image_group_ids = serializers.ListField(
+        child=serializers.UUIDField(),
+        write_only=True,
+        required=False,
+        help_text="List of image group IDs to remove from this listing"
     )
 
     class Meta:
@@ -178,7 +215,8 @@ class ListingUpdateSerializer(serializers.ModelSerializer):
             'title', 'description', 'listing_type', 'category',
             'price_type', 'price', 'price_min',
             'price_max', 'currency', 'is_price_negotiable',
-            'tag_ids', 'metadata', 'status'
+            'tag_ids', 'metadata', 'status',
+            'add_image_group_ids', 'remove_image_group_ids'
         ]
 
     def validate_status(self, value):
@@ -190,10 +228,51 @@ class ListingUpdateSerializer(serializers.ModelSerializer):
             )
         return value
 
+        # Validate image group operations
+        user = self.context['request'].user
+        listing = self.instance
+
+        add_groups = attrs.get('add_image_group_ids', [])
+        remove_groups = attrs.get('remove_image_group_ids', [])
+
+        if add_groups:
+            # Verify user owns the draft image groups
+            existing_groups = ImageAsset.objects.filter(
+                owner=user,
+                image_group_id__in=add_groups,
+                is_confirmed=False,
+                object_id__isnull=True
+            ).values_list('image_group_id', flat=True).distinct()
+
+            missing_groups = set(add_groups) - set(existing_groups)
+            if missing_groups:
+                raise serializers.ValidationError({
+                    'add_image_group_ids': f"Image groups not found or not available: {missing_groups}"
+                })
+
+        if remove_groups:
+            # Verify user owns the attached image groups
+            existing_groups = ImageAsset.objects.filter(
+                owner=user,
+                image_group_id__in=remove_groups,
+                object_id=listing.id,
+                is_confirmed=True
+            ).values_list('image_group_id', flat=True).distinct()
+
+            missing_groups = set(remove_groups) - set(existing_groups)
+            if missing_groups:
+                raise serializers.ValidationError({
+                    'remove_image_group_ids': f"Image groups not found or not attached: {missing_groups}"
+                })
+
+        return attrs
+
     def update(self, instance, validated_data):
         tag_ids = validated_data.pop('tag_ids', None)
+        add_image_groups = validated_data.pop('add_image_group_ids', [])
+        remove_image_groups = validated_data.pop('remove_image_group_ids', [])
 
-        # Update listing
+        # Update listing fields
         for attr, value in validated_data.items():
             setattr(instance, attr, value)
 
@@ -209,6 +288,29 @@ class ListingUpdateSerializer(serializers.ModelSerializer):
             from kakebe_apps.categories.models import Tag
             tags = Tag.objects.filter(id__in=tag_ids)
             instance.tags.set(tags)
+
+        # Add image groups
+        if add_image_groups:
+            ImageAsset.objects.filter(
+                image_group_id__in=add_image_groups
+            ).update(
+                object_id=instance.id,
+                is_confirmed=True,
+                order=ImageAsset.objects.filter(
+                    object_id=instance.id,
+                    image_type="listing"
+                ).count()  # Add to end
+            )
+
+        # Remove image groups
+        if remove_image_groups:
+            ImageAsset.objects.filter(
+                image_group_id__in=remove_image_groups
+            ).update(
+                object_id=None,
+                is_confirmed=False,
+                order=0
+            )
 
         return instance
 

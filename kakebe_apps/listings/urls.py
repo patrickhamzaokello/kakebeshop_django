@@ -41,3 +41,10 @@ urlpatterns = [
 # POST /listings/ with JSON body
 # PATCH /listings/{id}/ with JSON body
 # POST /listings/{id}/add_image/ with {"image": "url", "is_primary": tr
+
+# IMAGE ENDPOINTS:
+
+# GET    /listings/{id}/get_uploadable_images/ - Get draft images that can be attached
+# POST   /listings/{id}/add_images/            - Attach images to listing (bulk)
+# POST   /listings/{id}/reorder_images/        - Reorder listing images
+# DELETE /listings/{id}/remove_image_group/{image_group_id}/ - Remove image group

@@ -125,9 +125,11 @@ class Listing(models.Model):
                 and self.deleted_at is None
         )
 
+    # In your Listing model
     @property
     def primary_image(self):
-        """Get the primary image or first image"""
+        """Get the primary image or first image using ImageAsset model"""
+        # Get the first image group for this listing
         first_group = (
             ImageAsset.objects
             .filter(
@@ -143,10 +145,61 @@ class Listing(models.Model):
         if not first_group:
             return None
 
-        return ImageAsset.objects.filter(
+        # Get the medium variant of the first image group
+        image_asset = ImageAsset.objects.filter(
             image_group_id=first_group,
             variant="medium"
         ).first()
+
+        if image_asset:
+            return {
+                'id': str(image_asset.id),
+                'url': image_asset.cdn_url(),
+                'width': image_asset.width,
+                'height': image_asset.height,
+                'variant': image_asset.variant,
+                'image_group_id': str(image_asset.image_group_id)
+            }
+        return None
+
+    @property
+    def images(self):
+        """Get all images for this listing"""
+        image_groups = (
+            ImageAsset.objects
+            .filter(
+                image_type="listing",
+                object_id=self.id,
+                is_confirmed=True
+            )
+            .order_by("order", "created_at")
+            .values_list("image_group_id", flat=True)
+            .distinct()
+        )
+
+        images_list = []
+        for group_id in image_groups:
+            # Get all variants for this group
+            group_images = ImageAsset.objects.filter(
+                image_group_id=group_id,
+                is_confirmed=True
+            ).order_by('order')
+
+            group_dict = {}
+            for img in group_images:
+                group_dict[img.variant] = {
+                    'id': str(img.id),
+                    'url': img.cdn_url(),
+                    'width': img.width,
+                    'height': img.height,
+                    'size_bytes': img.size_bytes,
+                    'order': img.order
+                }
+
+            if group_dict:
+                images_list.append(group_dict)
+
+        return images_list
 
     def soft_delete(self):
         """Soft delete the listing"""

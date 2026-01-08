@@ -17,6 +17,13 @@ from .serializers import (
     ListingBusinessHourCreateSerializer
 )
 
+from kakebe_apps.imagehandler.serializers import (
+ListingImageUploadSerializer,
+ListingImageReorderSerializer,
+ImageAssetSerializer
+)
+from ..imagehandler.models import ImageAsset
+
 
 class ListingPagination(PageNumberPagination):
     """Custom pagination for listings"""
@@ -68,8 +75,8 @@ class ListingViewSet(viewsets.ViewSet):
             status='ACTIVE',
             is_verified=True,
             deleted_at__isnull=True,
-            merchant__verified=True  # Only show listings from verified merchants
-        ).select_related('merchant', 'merchant__user', 'category').prefetch_related('images', 'tags')
+            merchant__verified=True
+        ).select_related('merchant', 'merchant__user', 'category').prefetch_related('tags')
 
     def list(self, request):
         """List verified and active listings with filtering and search"""
@@ -284,25 +291,136 @@ class ListingViewSet(viewsets.ViewSet):
         methods=['post'],
         permission_classes=[permissions.IsAuthenticated, HasMerchantProfile]
     )
-    def add_image(self, request, pk=None):
-        """Add an image to listing"""
+    def add_images(self, request, pk=None):
+        """Attach existing images to listing"""
         listing = get_object_or_404(
             Listing,
             pk=pk,
             merchant=request.user.merchant_profile
         )
 
-        serializer = ListingImageCreateSerializer(
+        serializer = ListingImageUploadSerializer(
             data=request.data,
-            context={'listing': listing}
+            context={'request': request, 'listing': listing}
         )
         serializer.is_valid(raise_exception=True)
-        image = serializer.save()
+        serializer.save()
 
         return Response(
-            ListingImageSerializer(image).data,
-            status=status.HTTP_201_CREATED
+            {'detail': 'Images attached successfully.'},
+            status=status.HTTP_200_OK
         )
+
+    @action(
+        detail=True,
+        methods=['post'],
+        permission_classes=[permissions.IsAuthenticated, HasMerchantProfile]
+    )
+    def reorder_images(self, request, pk=None):
+        """Reorder listing images"""
+        listing = get_object_or_404(
+            Listing,
+            pk=pk,
+            merchant=request.user.merchant_profile
+        )
+
+        serializer = ListingImageReorderSerializer(
+            data=request.data,
+            context={'request': request, 'listing': listing}
+        )
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+
+        return Response(
+            {'detail': 'Images reordered successfully.'},
+            status=status.HTTP_200_OK
+        )
+
+    @action(
+        detail=True,
+        methods=['get'],
+        permission_classes=[permissions.IsAuthenticated, HasMerchantProfile]
+    )
+    def get_uploadable_images(self, request, pk=None):
+        """Get draft images that can be attached to this listing"""
+        # Verify listing ownership
+        listing = get_object_or_404(
+            Listing,
+            pk=pk,
+            merchant=request.user.merchant_profile
+        )
+
+        # Get draft images owned by user
+        draft_images = ImageAsset.objects.filter(
+            owner=request.user,
+            image_type="listing",
+            is_confirmed=False,
+            object_id__isnull=True
+        ).order_by('-created_at')
+
+        # Group by image_group_id
+        grouped_images = {}
+        for img in draft_images:
+            group_id = str(img.image_group_id)
+            if group_id not in grouped_images:
+                grouped_images[group_id] = {
+                    'image_group_id': group_id,
+                    'created_at': img.created_at,
+                    'variants': []
+                }
+            grouped_images[group_id]['variants'].append({
+                'id': str(img.id),
+                'variant': img.variant,
+                'url': img.cdn_url(),
+                'width': img.width,
+                'height': img.height,
+                'size_bytes': img.size_bytes
+            })
+
+        return Response(list(grouped_images.values()))
+
+    @action(
+        detail=True,
+        methods=['delete'],
+        permission_classes=[permissions.IsAuthenticated, HasMerchantProfile],
+        url_path='remove_image_group/(?P<image_group_id>[^/.]+)'
+    )
+    def remove_image_group(self, request, pk=None, image_group_id=None):
+        """Remove an image group from listing"""
+        listing = get_object_or_404(
+            Listing,
+            pk=pk,
+            merchant=request.user.merchant_profile
+        )
+
+        try:
+            # Remove image group from listing (set object_id to null and is_confirmed to False)
+            updated = ImageAsset.objects.filter(
+                image_group_id=image_group_id,
+                object_id=listing.id,
+                owner=request.user
+            ).update(
+                object_id=None,
+                is_confirmed=False,
+                order=0
+            )
+
+            if updated == 0:
+                return Response(
+                    {'detail': 'Image group not found or not owned by you.'},
+                    status=status.HTTP_404_NOT_FOUND
+                )
+
+            return Response(
+                {'detail': 'Image group removed successfully.'},
+                status=status.HTTP_200_OK
+            )
+
+        except ValueError:
+            return Response(
+                {'detail': 'Invalid image group ID.'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
 
 
     @action(
