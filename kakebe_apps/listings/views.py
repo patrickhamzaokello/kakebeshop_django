@@ -1,5 +1,5 @@
 # kakebe_apps/listings/views.py
-
+from django.core.cache import cache
 from rest_framework import viewsets, permissions, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
@@ -26,10 +26,20 @@ from ..imagehandler.models import ImageAsset
 
 
 class ListingPagination(PageNumberPagination):
-    """Custom pagination for listings"""
     page_size = 20
     page_size_query_param = 'page_size'
     max_page_size = 100
+
+    def get_paginated_response(self, data):
+        return Response({
+            'count': self.page.paginator.count,
+            'total_pages': self.page.paginator.num_pages,
+            'current_page': self.page.number,
+            'next': self.get_next_link(),
+            'previous': self.get_previous_link(),
+            'page_size': self.page_size,
+            'results': data
+        })
 
 
 class IsListingOwner(permissions.BasePermission):
@@ -448,11 +458,18 @@ class ListingViewSet(viewsets.ViewSet):
             status=status.HTTP_201_CREATED
         )
 
-    @action(detail=True, methods=['post'])
+    @action(detail=True, methods=['post'], permission_classes=[permissions.AllowAny])
     def increment_views(self, request, pk=None):
-        """Increment view count for a listing"""
+        """Increment view count - allow anonymous tracking"""
         listing = get_object_or_404(self.get_queryset(), pk=pk)
+
+        # Add rate limiting to prevent abuse
+        cache_key = f"listing_view_{pk}_{request.META.get('REMOTE_ADDR')}"
+        if cache.get(cache_key):
+            return Response({'views_count': listing.views_count})
+
         listing.increment_views()
+        cache.set(cache_key, True, 300)  # 5 min cooldown
         return Response({'views_count': listing.views_count})
 
     @action(detail=True, methods=['post'])

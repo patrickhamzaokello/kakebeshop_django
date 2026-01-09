@@ -49,6 +49,16 @@ CSRF_TRUSTED_ORIGINS = ["https://backend.kakebeshop.com"]
 AUTH_USER_MODEL = 'authentication.User'
 # Application definition
 
+REST_FRAMEWORK = {
+    'DEFAULT_SCHEMA_CLASS': 'drf_spectacular.openapi.AutoSchema',
+}
+
+SPECTACULAR_SETTINGS = {
+    'TITLE': 'Marketplace Listings API',
+    'DESCRIPTION': 'API for managing marketplace listings',
+    'VERSION': '1.0.0',
+}
+
 DJANGO_APPS  = [
     'django.contrib.admin',
     'django.contrib.auth',
@@ -56,6 +66,7 @@ DJANGO_APPS  = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
+    'drf_spectacular'
 ]
 
 THIRD_PARTY_APPS = [

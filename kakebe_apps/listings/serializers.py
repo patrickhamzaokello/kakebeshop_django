@@ -1,4 +1,5 @@
 # kakebe_apps/listings/serializers.py
+# CORRECTED VERSION - Fixed validation bug in ListingUpdateSerializer
 
 from rest_framework import serializers
 from django.utils import timezone
@@ -189,8 +190,13 @@ class ListingCreateSerializer(serializers.ModelSerializer):
 
         return listing
 
+
 class ListingUpdateSerializer(serializers.ModelSerializer):
-    """Serializer for updating listings by owner"""
+    """
+    Serializer for updating listings by owner
+
+    FIXED: Validation logic was previously unreachable - now properly structured
+    """
     tag_ids = serializers.ListField(
         child=serializers.IntegerField(),
         write_only=True,
@@ -219,14 +225,43 @@ class ListingUpdateSerializer(serializers.ModelSerializer):
             'add_image_group_ids', 'remove_image_group_ids'
         ]
 
-    def validate_status(self, value):
-        # Only allow merchants to change between DRAFT and PENDING
-        allowed_statuses = ['DRAFT', 'PENDING']
-        if value not in allowed_statuses:
-            raise serializers.ValidationError(
-                f"You can only set status to {', '.join(allowed_statuses)}."
-            )
-        return value
+    def validate(self, attrs):
+        """
+        FIXED: Previously the validation code after status validation was unreachable.
+        Now all validation is properly executed.
+        """
+        # Validate status changes
+        status_value = attrs.get('status')
+        if status_value:
+            allowed_statuses = ['DRAFT', 'PENDING']
+            if status_value not in allowed_statuses:
+                raise serializers.ValidationError({
+                    'status': f"You can only set status to {', '.join(allowed_statuses)}."
+                })
+
+        # Validate price consistency
+        price_type = attrs.get('price_type', self.instance.price_type)
+
+        if price_type == 'FIXED':
+            price = attrs.get('price', self.instance.price)
+            if not price:
+                raise serializers.ValidationError({
+                    'price': 'Price is required for fixed price type.'
+                })
+
+        elif price_type == 'RANGE':
+            price_min = attrs.get('price_min', self.instance.price_min)
+            price_max = attrs.get('price_max', self.instance.price_max)
+
+            if not price_min or not price_max:
+                raise serializers.ValidationError({
+                    'price_range': 'Both min and max prices are required for range price type.'
+                })
+
+            if price_min >= price_max:
+                raise serializers.ValidationError({
+                    'price_range': 'Minimum price must be less than maximum price.'
+                })
 
         # Validate image group operations
         user = self.context['request'].user
@@ -247,7 +282,7 @@ class ListingUpdateSerializer(serializers.ModelSerializer):
             missing_groups = set(add_groups) - set(existing_groups)
             if missing_groups:
                 raise serializers.ValidationError({
-                    'add_image_group_ids': f"Image groups not found or not available: {missing_groups}"
+                    'add_image_group_ids': f"Image groups not found or not available: {list(missing_groups)}"
                 })
 
         if remove_groups:
@@ -262,7 +297,7 @@ class ListingUpdateSerializer(serializers.ModelSerializer):
             missing_groups = set(remove_groups) - set(existing_groups)
             if missing_groups:
                 raise serializers.ValidationError({
-                    'remove_image_group_ids': f"Image groups not found or not attached: {missing_groups}"
+                    'remove_image_group_ids': f"Image groups not found or not attached: {list(missing_groups)}"
                 })
 
         return attrs
@@ -291,21 +326,25 @@ class ListingUpdateSerializer(serializers.ModelSerializer):
 
         # Add image groups
         if add_image_groups:
+            # Get current max order
+            current_count = ImageAsset.objects.filter(
+                object_id=instance.id,
+                image_type="listing"
+            ).count()
+
             ImageAsset.objects.filter(
                 image_group_id__in=add_image_groups
             ).update(
                 object_id=instance.id,
                 is_confirmed=True,
-                order=ImageAsset.objects.filter(
-                    object_id=instance.id,
-                    image_type="listing"
-                ).count()  # Add to end
+                order=current_count
             )
 
         # Remove image groups
         if remove_image_groups:
             ImageAsset.objects.filter(
-                image_group_id__in=remove_image_groups
+                image_group_id__in=remove_image_groups,
+                object_id=instance.id
             ).update(
                 object_id=None,
                 is_confirmed=False,
@@ -315,14 +354,24 @@ class ListingUpdateSerializer(serializers.ModelSerializer):
         return instance
 
 
-
-
 class ListingBusinessHourCreateSerializer(serializers.ModelSerializer):
     """Serializer for adding business hours to existing listings"""
 
     class Meta:
         model = ListingBusinessHour
         fields = ['day', 'opens_at', 'closes_at', 'is_closed']
+
+    def validate(self, attrs):
+        if not attrs.get('is_closed'):
+            if not attrs.get('opens_at') or not attrs.get('closes_at'):
+                raise serializers.ValidationError(
+                    "Opening and closing times are required when not closed."
+                )
+            if attrs['opens_at'] >= attrs['closes_at']:
+                raise serializers.ValidationError(
+                    "Opening time must be before closing time."
+                )
+        return attrs
 
     def create(self, validated_data):
         listing = self.context['listing']
