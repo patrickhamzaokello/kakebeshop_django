@@ -197,7 +197,29 @@ class ListingViewSet(viewsets.ViewSet):
         return Response(serializer.data)
 
     def retrieve(self, request, pk=None):
-        """Retrieve single listing (must be verified and active)"""
+        """
+        Retrieve single listing.
+        - Public: Must be verified and active
+        - Merchant owner: Can view their own listing regardless of status
+        """
+        # If user is authenticated and has merchant profile, check if they own the listing
+        if request.user.is_authenticated and hasattr(request.user, 'merchant_profile'):
+            try:
+                # Try to get the listing if the user owns it (any status)
+                listing = Listing.objects.select_related(
+                    'merchant', 'merchant__user', 'category'
+                ).prefetch_related('tags', 'business_hours').get(
+                    pk=pk,
+                    merchant=request.user.merchant_profile,
+                    deleted_at__isnull=True
+                )
+                serializer = ListingDetailSerializer(listing, context={'request': request})
+                return Response(serializer.data)
+            except Listing.DoesNotExist:
+                # Not the owner, continue to public check
+                pass
+
+        # Public view: must be verified and active
         listing = get_object_or_404(self.get_queryset(), pk=pk)
         serializer = ListingDetailSerializer(listing, context={'request': request})
         return Response(serializer.data)
@@ -525,7 +547,23 @@ class ListingViewSet(viewsets.ViewSet):
         """
         Increment view count for a listing with rate limiting.
         Prevents abuse by limiting increments per IP address.
+        Merchants can track views on their own listings regardless of status.
         """
+        # Check if merchant owns the listing
+        if request.user.is_authenticated and hasattr(request.user, 'merchant_profile'):
+            try:
+                listing = Listing.objects.get(
+                    pk=pk,
+                    merchant=request.user.merchant_profile,
+                    deleted_at__isnull=True
+                )
+                user_ip = request.META.get('REMOTE_ADDR', 'unknown')
+                views_count = ListingService.increment_views(listing, user_ip)
+                return Response({'views_count': views_count})
+            except Listing.DoesNotExist:
+                pass
+
+        # Public listings only
         listing = get_object_or_404(self.get_queryset(), pk=pk)
         user_ip = request.META.get('REMOTE_ADDR', 'unknown')
 
@@ -539,7 +577,23 @@ class ListingViewSet(viewsets.ViewSet):
         """
         Increment contact count for a listing with rate limiting.
         Prevents abuse by limiting increments per IP address.
+        Merchants can track contacts on their own listings regardless of status.
         """
+        # Check if merchant owns the listing
+        if request.user.is_authenticated and hasattr(request.user, 'merchant_profile'):
+            try:
+                listing = Listing.objects.get(
+                    pk=pk,
+                    merchant=request.user.merchant_profile,
+                    deleted_at__isnull=True
+                )
+                user_ip = request.META.get('REMOTE_ADDR', 'unknown')
+                contact_count = ListingService.increment_contacts(listing, user_ip)
+                return Response({'contact_count': contact_count})
+            except Listing.DoesNotExist:
+                pass
+
+        # Public listings only
         listing = get_object_or_404(self.get_queryset(), pk=pk)
         user_ip = request.META.get('REMOTE_ADDR', 'unknown')
 
