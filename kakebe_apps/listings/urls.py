@@ -4,47 +4,36 @@ from django.urls import path, include
 from rest_framework.routers import DefaultRouter
 from .views import ListingViewSet
 
+# Create router and register viewset
 router = DefaultRouter()
 router.register(r'listings', ListingViewSet, basename='listing')
 
+# URL patterns
 urlpatterns = [
     path('', include(router.urls)),
 ]
 
-# This creates the following routes:
+# The router automatically generates the following URLs:
 #
-# PUBLIC ENDPOINTS (Verified listings only):
-# GET    /listings/                         - List verified listings (paginated)
-#                                             Query params: search, listing_type, category,
-#                                             merchant, min_price, max_price,
-#                                             sort_by, page, page_size
-# GET    /listings/featured/                - Get featured listings (shuffled)
-#                                             Query params: limit (default: 10, max: 50)
-# GET    /listings/{id}/                    - Retrieve listing detail (must be verified)
-# POST   /listings/{id}/increment_views/    - Increment view count
-# POST   /listings/{id}/increment_contacts/ - Increment contact count
+# Public endpoints:
+# GET    /listings/                              - List all active, verified listings
+# GET    /listings/{id}/                         - Retrieve single listing detail
+# GET    /listings/featured/                     - Get featured listings
+# POST   /listings/{id}/increment_views/         - Increment view count
+# POST   /listings/{id}/increment_contacts/      - Increment contact count
 #
-# AUTHENTICATED MERCHANT ENDPOINTS:
-# GET    /listings/my_listings/             - Get own listings (all statuses)
-#                                             Query params: status, page, page_size
-# POST   /listings/                         - Create listing (starts as PENDING)
-# PATCH  /listings/{id}/                    - Update own listing
-# DELETE /listings/{id}/                    - Soft delete own listing
-# POST   /listings/{id}/add_image/          - Add image to listing
-# DELETE /listings/{id}/remove_image/{image_id}/ - Remove image
-# POST   /listings/{id}/add_business_hour/  - Add business hours
-#
-# Example API calls:
-# GET /listings/?page=1&page_size=20&category=5&min_price=100&sort_by=-created_at
-# GET /listings/featured/?limit=5
-# GET /listings/my_listings/?status=PENDING
-# POST /listings/ with JSON body
-# PATCH /listings/{id}/ with JSON body
-# POST /listings/{id}/add_image/ with {"image": "url", "is_primary": tr
-
-# IMAGE ENDPOINTS:
-
-# GET    /listings/{id}/get_uploadable_images/ - Get draft images that can be attached
-# POST   /listings/{id}/add_images/            - Attach images to listing (bulk)
-# POST   /listings/{id}/reorder_images/        - Reorder listing images
+# Authenticated merchant endpoints:
+# POST   /listings/                              - Create new listing
+# PATCH  /listings/{id}/                         - Update own listing
+# DELETE /listings/{id}/                         - Soft delete own listing
+# GET    /listings/my_listings/                  - Get merchant's own listings
+# POST   /listings/{id}/add_images/              - Attach images to listing
+# POST   /listings/{id}/reorder_images/          - Reorder listing images
+# GET    /listings/{id}/get_uploadable_images/   - Get draft images available to attach
 # DELETE /listings/{id}/remove_image_group/{image_group_id}/ - Remove image group
+# POST   /listings/{id}/add_business_hour/       - Add business hours
+# GET    /listings/{id}/stats/                   - Get listing statistics
+# POST   /listings/bulk_update_status/           - Bulk update listing statuses
+# POST   /listings/bulk_delete/                  - Bulk soft delete listings
+# GET    /listings/analytics/                    - Get merchant analytics
+# GET    /listings/export_csv/                   - Export listings to CSV

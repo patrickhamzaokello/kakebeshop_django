@@ -49,6 +49,24 @@ CSRF_TRUSTED_ORIGINS = ["https://backend.kakebeshop.com"]
 AUTH_USER_MODEL = 'authentication.User'
 # Application definition
 
+# Listing limits per merchant
+LISTINGS_PER_MERCHANT_LIMIT = 100
+LISTINGS_FEATURED_LIMIT = 50
+
+# View/Contact increment rate limits (in seconds)
+LISTING_VIEW_INCREMENT_COOLDOWN = 300  # 5 minutes
+LISTING_CONTACT_INCREMENT_COOLDOWN = 3600  # 1 hour
+
+# Image settings
+LISTING_MAX_IMAGES = 10
+LISTING_IMAGE_VARIANTS = ['thumb', 'medium', 'large', 'original']
+
+# Listing expiry (optional)
+LISTING_DEFAULT_EXPIRY_DAYS = 30
+
+# Featured listing duration (optional)
+FEATURED_LISTING_DEFAULT_DAYS = 7
+
 REST_FRAMEWORK = {
     'DEFAULT_SCHEMA_CLASS': 'drf_spectacular.openapi.AutoSchema',
 }
