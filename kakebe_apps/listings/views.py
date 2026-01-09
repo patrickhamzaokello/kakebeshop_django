@@ -1,4 +1,5 @@
 # kakebe_apps/listings/views.py
+# FIXED VERSION - Resolves FieldError with select_related and only()
 
 from rest_framework import viewsets, permissions, status
 from rest_framework.decorators import action
@@ -100,6 +101,9 @@ class ListingViewSet(viewsets.ViewSet):
         """
         Optimized base queryset for verified, active listings.
         Uses select_related and prefetch_related to minimize database queries.
+
+        NOTE: We removed .only() to avoid FieldError when using select_related.
+        If you need to limit fields, use defer() instead, or handle it in the serializer.
         """
         return Listing.objects.filter(
             status='ACTIVE',
@@ -112,13 +116,6 @@ class ListingViewSet(viewsets.ViewSet):
             'category'
         ).prefetch_related(
             'tags'
-        ).only(
-            # Only fetch fields needed for list view
-            'id', 'title', 'listing_type', 'price_type',
-            'price', 'price_min', 'price_max', 'currency',
-            'is_featured', 'is_verified', 'views_count',
-            'created_at', 'merchant__id', 'merchant__display_name',
-            'category__id', 'category__name'
         )
 
     def list(self, request):
