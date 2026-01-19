@@ -118,6 +118,54 @@ class CartViewSet(viewsets.ViewSet):
             'message': 'Item removed from cart'
         }, status=status.HTTP_204_NO_CONTENT)
 
+    @action(detail=False, methods=['delete'], url_path='remove-by-listing/(?P<listing_id>[^/.]+)')
+    def remove_by_listing(self, request, listing_id=None):
+        """Remove item from cart by listing ID"""
+        cart = self.get_or_create_cart(request.user)
+        cart_item = get_object_or_404(CartItem, cart=cart, listing_id=listing_id)
+
+        cart_item.delete()
+
+        return Response({
+            'message': 'Item removed from cart'
+        }, status=status.HTTP_204_NO_CONTENT)
+
+    @action(detail=False, methods=['get'], url_path='check/(?P<listing_id>[^/.]+)')
+    def check_item(self, request, listing_id=None):
+        """
+        Check if a listing is in the user's cart.
+
+        Returns:
+            - in_cart: boolean indicating if item is in cart
+            - cart_item_id: UUID of cart item if exists (null otherwise)
+            - quantity: current quantity in cart if exists (0 otherwise)
+
+        Example:
+            GET /api/v1/cart/check/123e4567-e89b-12d3-a456-426614174000/
+
+            Response:
+            {
+                "in_cart": true,
+                "cart_item_id": "987f6543-e21a-43d2-b345-567890123456",
+                "quantity": 2
+            }
+        """
+        cart = self.get_or_create_cart(request.user)
+
+        try:
+            cart_item = CartItem.objects.get(cart=cart, listing_id=listing_id)
+            return Response({
+                'in_cart': True,
+                'cart_item_id': str(cart_item.id),
+                'quantity': cart_item.quantity
+            })
+        except CartItem.DoesNotExist:
+            return Response({
+                'in_cart': False,
+                'cart_item_id': None,
+                'quantity': 0
+            })
+
     @action(detail=False, methods=['delete'])
     def clear(self, request):
         """Clear all items from cart"""
