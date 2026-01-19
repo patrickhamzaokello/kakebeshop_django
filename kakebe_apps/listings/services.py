@@ -15,6 +15,7 @@ from django.db.models import Count, Sum, Avg, Q
 from django.db.models.functions import TruncDate
 from typing import List, Dict, Optional
 import logging
+from decimal import Decimal
 
 from .models import Listing, ListingBusinessHour, ListingTag
 from ..imagehandler.models import ImageAsset
@@ -492,6 +493,15 @@ class ListingService:
 
         return list(grouped_images.values())
 
+
+    """
+      Service class for finding similar listings based on various criteria.
+      Uses category, tags, price range, and listing type to determine similarity.
+    
+      FIXED: Properly handles Decimal types for price calculations
+      """
+
+
     @staticmethod
     def get_similar_from_merchant(listing, limit=6, exclude_current=True):
         """
@@ -569,9 +579,13 @@ class ListingService:
             similar_listings.extend(other_listings)
 
         # Cache for 15 minutes
-        cache.set(cache_key, similar_listings, 60 * 15)
+        try:
+            cache.set(cache_key, similar_listings, 60 * 15)
+        except Exception as e:
+            logger.warning(f"Failed to cache similar merchant listings: {e}")
 
         return similar_listings
+
 
     @staticmethod
     def get_similar_from_marketplace(listing, limit=12, exclude_current=True):
@@ -590,6 +604,8 @@ class ListingService:
 
         Returns:
             List of similar listings ordered by relevance score
+
+        FIXED: Properly handles Decimal types in price calculations
         """
         cache_key = f'similar_marketplace_{listing.id}_{limit}'
         cached_result = cache.get(cache_key)
@@ -654,23 +670,66 @@ class ListingService:
             similar_listings.extend(same_category)
 
         # 4. LOWER PRIORITY: Similar price range + same listing type
+        # FIXED: Convert float to Decimal for price calculations
         if len(similar_listings) < limit and listing.price:
             remaining = limit - len(similar_listings)
-            # Price within 50% range
-            price_min = listing.price * 0.5
-            price_max = listing.price * 1.5
+
+            # Convert listing.price to Decimal if it isn't already
+            if isinstance(listing.price, Decimal):
+                reference_price = listing.price
+            else:
+                reference_price = Decimal(str(listing.price))
+
+            # Price within 50% range - use Decimal for calculations
+            price_min = reference_price * Decimal('0.5')
+            price_max = reference_price * Decimal('1.5')
 
             similar_price = base_queryset.filter(
                 listing_type=listing.listing_type,
                 price__gte=price_min,
-                price__lte=price_max
+                price__lte=price_max,
+                price__isnull=False  # Only include listings with prices
             ).exclude(
                 id__in=[l.id for l in similar_listings]
             ).order_by('-is_featured', '-views_count')[:remaining]
 
             similar_listings.extend(similar_price)
 
-        # 5. LOWEST PRIORITY: Just same listing type
+        # 5. ALTERNATIVE: Similar price range (price_min/price_max) + same listing type
+        # FIXED: Handle price_min and price_max with Decimal
+        if len(similar_listings) < limit and (listing.price_min or listing.price_max):
+            remaining = limit - len(similar_listings)
+
+            # Determine reference price from range
+            if listing.price_min and listing.price_max:
+                # Use average of min and max
+                if isinstance(listing.price_min, Decimal):
+                    avg_price = (listing.price_min + listing.price_max) / Decimal('2')
+                else:
+                    avg_price = (Decimal(str(listing.price_min)) + Decimal(str(listing.price_max))) / Decimal('2')
+            elif listing.price_min:
+                avg_price = Decimal(str(listing.price_min)) if not isinstance(listing.price_min,
+                                                                              Decimal) else listing.price_min
+            else:
+                avg_price = Decimal(str(listing.price_max)) if not isinstance(listing.price_max,
+                                                                              Decimal) else listing.price_max
+
+            price_min = avg_price * Decimal('0.5')
+            price_max = avg_price * Decimal('1.5')
+
+            similar_price_range = base_queryset.filter(
+                listing_type=listing.listing_type
+            ).filter(
+                Q(price__gte=price_min, price__lte=price_max) |
+                Q(price_min__gte=price_min, price_min__lte=price_max) |
+                Q(price_max__gte=price_min, price_max__lte=price_max)
+            ).exclude(
+                id__in=[l.id for l in similar_listings]
+            ).order_by('-is_featured', '-views_count')[:remaining]
+
+            similar_listings.extend(similar_price_range)
+
+        # 6. LOWEST PRIORITY: Just same listing type
         if len(similar_listings) < limit:
             remaining = limit - len(similar_listings)
             same_type = base_queryset.filter(
@@ -682,9 +741,13 @@ class ListingService:
             similar_listings.extend(same_type)
 
         # Cache for 30 minutes
-        cache.set(cache_key, similar_listings, 60 * 30)
+        try:
+            cache.set(cache_key, similar_listings, 60 * 30)
+        except Exception as e:
+            logger.warning(f"Failed to cache similar marketplace listings: {e}")
 
         return similar_listings
+
 
     @staticmethod
     def clear_similarity_cache(listing):
@@ -694,13 +757,19 @@ class ListingService:
         Args:
             listing: The Listing object that was updated
         """
-        # Clear merchant similar cache
-        cache.delete_pattern(f'similar_merchant_{listing.id}_*')
+        try:
+            # Clear merchant similar cache
+            for limit in [6, 8, 10, 12, 20]:  # Common limit values
+                cache.delete(f'similar_merchant_{listing.id}_{limit}')
 
-        # Clear marketplace similar cache
-        cache.delete_pattern(f'similar_marketplace_{listing.id}_*')
+            # Clear marketplace similar cache
+            for limit in [6, 8, 10, 12, 15, 20, 50]:  # Common limit values
+                cache.delete(f'similar_marketplace_{listing.id}_{limit}')
 
-        logger.info(f"Cleared similarity cache for listing {listing.id}")
+            logger.info(f"Cleared similarity cache for listing {listing.id}")
+        except Exception as e:
+            logger.warning(f"Failed to clear similarity cache: {e}")
+
 
     @staticmethod
     def get_recommendations_for_user(user, limit=20):
@@ -727,3 +796,26 @@ class ListingService:
             'merchant',
             'category'
         ).order_by('-views_count', '-is_featured')[:limit]
+
+
+# Helper function to safely convert to Decimal
+def to_decimal(value):
+    """
+    Safely convert a value to Decimal.
+
+    Args:
+        value: Value to convert (can be int, float, str, or Decimal)
+
+    Returns:
+        Decimal or None if value is None
+    """
+    if value is None:
+        return None
+
+    if isinstance(value, Decimal):
+        return value
+
+    try:
+        return Decimal(str(value))
+    except (ValueError, TypeError):
+        return None
