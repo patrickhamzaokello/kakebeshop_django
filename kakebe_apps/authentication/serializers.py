@@ -2,7 +2,7 @@ from django.core.cache import cache
 from rest_framework import serializers
 from .models import User
 from django.contrib import auth
-from rest_framework.exceptions import AuthenticationFailed, ValidationError
+from rest_framework.exceptions import ValidationError
 from rest_framework_simplejwt.tokens import RefreshToken, TokenError
 from django.contrib.auth.tokens import default_token_generator
 from django.utils.encoding import force_str
@@ -158,20 +158,20 @@ class LoginSerializer(serializers.ModelSerializer):
         password = attrs.get('password', '')
 
         if not email or not password:
-            raise AuthenticationFailed('Email and password are required')
+            raise serializers.ValidationError('Email and password are required')
 
         # Check if user exists
         try:
             user_query = User.objects.filter(email=email)
 
             if not user_query.exists():
-                raise AuthenticationFailed('Invalid credentials. Please check your email and password.')
+                raise serializers.ValidationError('Invalid credentials. Please check your email and password.')
 
             user_obj = user_query.first()
 
             # Check auth provider
             if user_obj.auth_provider != 'email':
-                raise AuthenticationFailed(
+                raise serializers.ValidationError(
                     f'This account uses {user_obj.auth_provider} authentication. '
                     f'Please login using {user_obj.auth_provider}.'
                 )
@@ -180,13 +180,13 @@ class LoginSerializer(serializers.ModelSerializer):
             user = auth.authenticate(email=email, password=password)
 
             if not user:
-                raise AuthenticationFailed('Invalid credentials. Please check your email and password.')
+                raise serializers.ValidationError('Invalid credentials. Please check your email and password.')
 
             if not user.is_active:
-                raise AuthenticationFailed('Your account has been disabled. Please contact support.')
+                raise serializers.ValidationError('Your account has been disabled. Please contact support.')
 
             if not user.is_verified:
-                raise AuthenticationFailed(
+                raise serializers.ValidationError(
                     'Your email is not verified. Please check your email for the verification code.'
                 )
 
@@ -196,7 +196,7 @@ class LoginSerializer(serializers.ModelSerializer):
             return attrs
 
         except User.DoesNotExist:
-            raise AuthenticationFailed('Invalid credentials. Please check your email and password.')
+            raise serializers.ValidationError('Invalid credentials. Please check your email and password.')
 
     def to_representation(self, instance):
         """Return user data with tokens"""
@@ -276,7 +276,7 @@ class SetNewPasswordSerializer(serializers.Serializer):
 
             # Verify token
             if not default_token_generator.check_token(user, token):
-                raise AuthenticationFailed(
+                raise serializers.ValidationError(
                     'The reset token is invalid or has expired. Please request a new password reset.',
                     401
                 )
@@ -286,7 +286,7 @@ class SetNewPasswordSerializer(serializers.Serializer):
             session_data = cache.get(reset_session_key)
 
             if not session_data or not session_data.get('verified'):
-                raise AuthenticationFailed(
+                raise serializers.ValidationError(
                     'Reset session has expired. Please verify your code again.',
                     401
                 )
@@ -301,11 +301,11 @@ class SetNewPasswordSerializer(serializers.Serializer):
             return attrs
 
         except (TypeError, ValueError, OverflowError):
-            raise AuthenticationFailed('The reset link is invalid. Please request a new password reset.', 401)
+            raise serializers.ValidationError('The reset link is invalid. Please request a new password reset.', 401)
         except User.DoesNotExist:
-            raise AuthenticationFailed('User not found. Please request a new password reset.', 401)
+            raise serializers.ValidationError('User not found. Please request a new password reset.', 401)
         except Exception as e:
-            raise AuthenticationFailed('Password reset failed. Please try again.', 401)
+            raise serializers.ValidationError('Password reset failed. Please try again.', 401)
 
 
 class LogoutSerializer(serializers.Serializer):

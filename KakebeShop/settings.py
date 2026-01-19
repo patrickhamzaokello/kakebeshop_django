@@ -32,7 +32,8 @@ AWS_CLOUDFRONT_DOMAIN = config('AWS_CLOUDFRONT_DOMAIN')
 ALLOWED_HOSTS = [
     'backend.kakebeshop.com',
     'localhost',
-    '127.0.0.1'
+    '127.0.0.1',
+    '192.168.1.3'
 ]
 
 GOOGLE_CLIENT_IDS = [

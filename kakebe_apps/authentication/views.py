@@ -316,10 +316,7 @@ class LoginAPIView(generics.GenericAPIView):
             return Response(serializer.data, status=status.HTTP_200_OK)
 
         except ValidationError as e:
-            return Response({
-                'error': 'Login failed',
-                'details': e.detail
-            }, status=status.HTTP_400_BAD_REQUEST)
+            return Response(e.detail, status=status.HTTP_400_BAD_REQUEST)
 
         except Exception as e:
             logger.error(f"Unexpected error in login: {str(e)}", exc_info=True)
