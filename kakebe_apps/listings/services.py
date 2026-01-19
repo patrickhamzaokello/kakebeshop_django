@@ -491,3 +491,239 @@ class ListingService:
             })
 
         return list(grouped_images.values())
+
+    @staticmethod
+    def get_similar_from_merchant(listing, limit=6, exclude_current=True):
+        """
+        Get similar listings from the same merchant.
+
+        Args:
+            listing: The reference Listing object
+            limit: Maximum number of similar listings to return (default: 6)
+            exclude_current: Whether to exclude the current listing (default: True)
+
+        Returns:
+            QuerySet of similar listings
+        """
+        cache_key = f'similar_merchant_{listing.id}_{limit}'
+        cached_result = cache.get(cache_key)
+
+        if cached_result is not None:
+            return cached_result
+
+        queryset = Listing.objects.filter(
+            merchant=listing.merchant,
+            status='ACTIVE',
+            is_verified=True,
+            deleted_at__isnull=True
+        ).select_related(
+            'merchant',
+            'merchant__user',
+            'category'
+        ).prefetch_related('tags')
+
+        # Exclude current listing if requested
+        if exclude_current:
+            queryset = queryset.exclude(id=listing.id)
+
+        # Prioritize similar items
+        similar_listings = []
+
+        # 1. Same category and listing type
+        same_category_type = queryset.filter(
+            category=listing.category,
+            listing_type=listing.listing_type
+        ).order_by('-is_featured', '-views_count')[:limit]
+
+        similar_listings.extend(same_category_type)
+
+        # 2. If we need more, get same category (different type)
+        if len(similar_listings) < limit:
+            remaining = limit - len(similar_listings)
+            same_category = queryset.filter(
+                category=listing.category
+            ).exclude(
+                id__in=[l.id for l in similar_listings]
+            ).order_by('-is_featured', '-views_count')[:remaining]
+
+            similar_listings.extend(same_category)
+
+        # 3. If still need more, get same listing type
+        if len(similar_listings) < limit:
+            remaining = limit - len(similar_listings)
+            same_type = queryset.filter(
+                listing_type=listing.listing_type
+            ).exclude(
+                id__in=[l.id for l in similar_listings]
+            ).order_by('-is_featured', '-views_count')[:remaining]
+
+            similar_listings.extend(same_type)
+
+        # 4. Finally, just get any other listings from merchant
+        if len(similar_listings) < limit:
+            remaining = limit - len(similar_listings)
+            other_listings = queryset.exclude(
+                id__in=[l.id for l in similar_listings]
+            ).order_by('-is_featured', '-created_at')[:remaining]
+
+            similar_listings.extend(other_listings)
+
+        # Cache for 15 minutes
+        cache.set(cache_key, similar_listings, 60 * 15)
+
+        return similar_listings
+
+    @staticmethod
+    def get_similar_from_marketplace(listing, limit=12, exclude_current=True):
+        """
+        Get similar listings from the entire marketplace.
+        Uses a scoring system based on:
+        - Same category (highest weight)
+        - Common tags
+        - Similar price range
+        - Same listing type
+
+        Args:
+            listing: The reference Listing object
+            limit: Maximum number of similar listings to return (default: 12)
+            exclude_current: Whether to exclude the current listing (default: True)
+
+        Returns:
+            List of similar listings ordered by relevance score
+        """
+        cache_key = f'similar_marketplace_{listing.id}_{limit}'
+        cached_result = cache.get(cache_key)
+
+        if cached_result is not None:
+            return cached_result
+
+        base_queryset = Listing.objects.filter(
+            status='ACTIVE',
+            is_verified=True,
+            deleted_at__isnull=True,
+            merchant__verified=True
+        ).select_related(
+            'merchant',
+            'merchant__user',
+            'category'
+        ).prefetch_related('tags')
+
+        # Exclude current listing and same merchant if requested
+        if exclude_current:
+            base_queryset = base_queryset.exclude(id=listing.id)
+
+        # Get listing tags for comparison
+        listing_tag_ids = list(listing.tags.values_list('id', flat=True))
+
+        # Build complex query for similarity
+        similar_listings = []
+
+        # 1. HIGHEST PRIORITY: Same category + same listing type + matching tags
+        if listing_tag_ids:
+            category_type_tags = base_queryset.filter(
+                category=listing.category,
+                listing_type=listing.listing_type,
+                tags__id__in=listing_tag_ids
+            ).annotate(
+                common_tags=Count('tags')
+            ).order_by('-common_tags', '-is_featured', '-views_count').distinct()[:limit // 3]
+
+            similar_listings.extend(category_type_tags)
+
+        # 2. HIGH PRIORITY: Same category + same listing type (no tag match required)
+        if len(similar_listings) < limit:
+            remaining = limit - len(similar_listings)
+            category_type = base_queryset.filter(
+                category=listing.category,
+                listing_type=listing.listing_type
+            ).exclude(
+                id__in=[l.id for l in similar_listings]
+            ).order_by('-is_featured', '-views_count')[:remaining]
+
+            similar_listings.extend(category_type)
+
+        # 3. MEDIUM PRIORITY: Same category (different type OK)
+        if len(similar_listings) < limit:
+            remaining = limit - len(similar_listings)
+            same_category = base_queryset.filter(
+                category=listing.category
+            ).exclude(
+                id__in=[l.id for l in similar_listings]
+            ).order_by('-is_featured', '-views_count')[:remaining]
+
+            similar_listings.extend(same_category)
+
+        # 4. LOWER PRIORITY: Similar price range + same listing type
+        if len(similar_listings) < limit and listing.price:
+            remaining = limit - len(similar_listings)
+            # Price within 50% range
+            price_min = listing.price * 0.5
+            price_max = listing.price * 1.5
+
+            similar_price = base_queryset.filter(
+                listing_type=listing.listing_type,
+                price__gte=price_min,
+                price__lte=price_max
+            ).exclude(
+                id__in=[l.id for l in similar_listings]
+            ).order_by('-is_featured', '-views_count')[:remaining]
+
+            similar_listings.extend(similar_price)
+
+        # 5. LOWEST PRIORITY: Just same listing type
+        if len(similar_listings) < limit:
+            remaining = limit - len(similar_listings)
+            same_type = base_queryset.filter(
+                listing_type=listing.listing_type
+            ).exclude(
+                id__in=[l.id for l in similar_listings]
+            ).order_by('-is_featured', '-views_count')[:remaining]
+
+            similar_listings.extend(same_type)
+
+        # Cache for 30 minutes
+        cache.set(cache_key, similar_listings, 60 * 30)
+
+        return similar_listings
+
+    @staticmethod
+    def clear_similarity_cache(listing):
+        """
+        Clear cached similar listings when a listing is updated.
+
+        Args:
+            listing: The Listing object that was updated
+        """
+        # Clear merchant similar cache
+        cache.delete_pattern(f'similar_merchant_{listing.id}_*')
+
+        # Clear marketplace similar cache
+        cache.delete_pattern(f'similar_marketplace_{listing.id}_*')
+
+        logger.info(f"Cleared similarity cache for listing {listing.id}")
+
+    @staticmethod
+    def get_recommendations_for_user(user, limit=20):
+        """
+        Get personalized recommendations based on user's viewing/interaction history.
+        This is a placeholder for future implementation with user behavior tracking.
+
+        Args:
+            user: User object
+            limit: Maximum number of recommendations
+
+        Returns:
+            QuerySet of recommended listings
+        """
+        # For now, return popular listings
+        # TODO: Implement based on user viewing history, purchases, etc.
+
+        return Listing.objects.filter(
+            status='ACTIVE',
+            is_verified=True,
+            deleted_at__isnull=True,
+            merchant__verified=True
+        ).select_related(
+            'merchant',
+            'category'
+        ).order_by('-views_count', '-is_featured')[:limit]

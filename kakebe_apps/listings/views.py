@@ -1,6 +1,4 @@
 # kakebe_apps/listings/views.py
-# FIXED VERSION - Resolves FieldError with select_related and only()
-
 from rest_framework import viewsets, permissions, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
@@ -76,6 +74,8 @@ class ListingViewSet(viewsets.ViewSet):
     - list: GET /listings/ - Paginated list of verified, active listings
     - retrieve: GET /listings/{id}/ - Public listing detail
     - featured: GET /listings/featured/ - Shuffled featured listings
+    - similar_from_merchant: GET /listings/{id}/similar_from_merchant/ - Similar listings from same merchant
+    - similar_from_marketplace: GET /listings/{id}/similar_from_marketplace/ - Similar listings from marketplace
     - increment_views: POST /listings/{id}/increment_views/ - Track views (rate limited)
     - increment_contacts: POST /listings/{id}/increment_contacts/ - Track contacts (rate limited)
 
@@ -101,9 +101,6 @@ class ListingViewSet(viewsets.ViewSet):
         """
         Optimized base queryset for verified, active listings.
         Uses select_related and prefetch_related to minimize database queries.
-
-        NOTE: We removed .only() to avoid FieldError when using select_related.
-        If you need to limit fields, use defer() instead, or handle it in the serializer.
         """
         return Listing.objects.filter(
             status='ACTIVE',
@@ -251,6 +248,136 @@ class ListingViewSet(viewsets.ViewSet):
         )
         return Response(serializer.data)
 
+    # NEW ENDPOINT: Similar listings from same merchant
+    @action(detail=True, methods=['get'], url_path='similar-from-merchant')
+    def similar_from_merchant(self, request, pk=None):
+        """
+        Get similar listings from the same merchant.
+
+        Query params:
+        - limit: Number of listings to return (default: 6, max: 20)
+        - exclude_current: Whether to exclude current listing (default: true)
+
+        Returns listings prioritized by:
+        1. Same category and listing type
+        2. Same category
+        3. Same listing type
+        4. Any other listings from merchant
+        """
+        # Get the reference listing (must be public unless owner)
+        if request.user.is_authenticated and hasattr(request.user, 'merchant_profile'):
+            try:
+                listing = Listing.objects.get(
+                    pk=pk,
+                    merchant=request.user.merchant_profile,
+                    deleted_at__isnull=True
+                )
+            except Listing.DoesNotExist:
+                listing = get_object_or_404(self.get_queryset(), pk=pk)
+        else:
+            listing = get_object_or_404(self.get_queryset(), pk=pk)
+
+        # Parse query parameters
+        limit = request.query_params.get('limit', 6)
+        try:
+            limit = min(int(limit), 20)
+        except ValueError:
+            limit = 6
+
+        exclude_current = request.query_params.get('exclude_current', 'true').lower() == 'true'
+
+        # Get similar listings using service
+        similar_listings = ListingService.get_similar_from_merchant(
+            listing=listing,
+            limit=limit,
+            exclude_current=exclude_current
+        )
+
+        serializer = ListingListSerializer(
+            similar_listings,
+            many=True,
+            context={'request': request}
+        )
+
+        return Response({
+            'count': len(similar_listings),
+            'reference_listing': {
+                'id': str(listing.id),
+                'title': listing.title,
+                'merchant_name': listing.merchant.display_name
+            },
+            'results': serializer.data
+        })
+
+    # NEW ENDPOINT: Similar listings from marketplace
+    @action(detail=True, methods=['get'], url_path='similar-from-marketplace')
+    def similar_from_marketplace(self, request, pk=None):
+        """
+        Get similar listings from the entire marketplace.
+
+        Query params:
+        - limit: Number of listings to return (default: 12, max: 50)
+        - exclude_current: Whether to exclude current listing (default: true)
+        - exclude_merchant: Whether to exclude same merchant (default: false)
+
+        Returns listings prioritized by:
+        1. Same category + same type + matching tags
+        2. Same category + same type
+        3. Same category
+        4. Similar price range + same type
+        5. Same type
+        """
+        # Get the reference listing (must be public unless owner)
+        if request.user.is_authenticated and hasattr(request.user, 'merchant_profile'):
+            try:
+                listing = Listing.objects.get(
+                    pk=pk,
+                    merchant=request.user.merchant_profile,
+                    deleted_at__isnull=True
+                )
+            except Listing.DoesNotExist:
+                listing = get_object_or_404(self.get_queryset(), pk=pk)
+        else:
+            listing = get_object_or_404(self.get_queryset(), pk=pk)
+
+        # Parse query parameters
+        limit = request.query_params.get('limit', 12)
+        try:
+            limit = min(int(limit), 50)
+        except ValueError:
+            limit = 12
+
+        exclude_current = request.query_params.get('exclude_current', 'true').lower() == 'true'
+
+        # Get similar listings using service
+        similar_listings = ListingService.get_similar_from_marketplace(
+            listing=listing,
+            limit=limit,
+            exclude_current=exclude_current
+        )
+
+        # Optional: exclude same merchant
+        exclude_merchant = request.query_params.get('exclude_merchant', 'false').lower() == 'true'
+        if exclude_merchant:
+            similar_listings = [l for l in similar_listings if l.merchant_id != listing.merchant_id][:limit]
+
+        serializer = ListingListSerializer(
+            similar_listings,
+            many=True,
+            context={'request': request}
+        )
+
+        return Response({
+            'count': len(similar_listings),
+            'reference_listing': {
+                'id': str(listing.id),
+                'title': listing.title,
+                'category': listing.category.name,
+                'listing_type': listing.get_listing_type_display()
+            },
+            'results': serializer.data
+        })
+
     @action(
         detail=False,
         methods=['get'],
@@ -373,6 +500,9 @@ class ListingViewSet(viewsets.ViewSet):
                 remove_image_groups=remove_image_groups
             )
 
+            # Clear similarity cache when listing is updated
+            ListingService.clear_similarity_cache(listing)
+
             logger.info(f"Listing updated: {listing.id}")
 
             return Response(
@@ -400,6 +530,9 @@ class ListingViewSet(viewsets.ViewSet):
         )
 
         ListingService.soft_delete_listing(listing)
+
+        # Clear similarity cache when listing is deleted
+        ListingService.clear_similarity_cache(listing)
 
         return Response(
             {'detail': 'Listing deleted successfully.'},
