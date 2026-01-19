@@ -1,3 +1,6 @@
+# kakebe_apps/listings/models.py
+# UPDATED: Modified images property to return only thumb and large variants
+
 import uuid
 
 from django.db import models
@@ -125,7 +128,6 @@ class Listing(models.Model):
                 and self.deleted_at is None
         )
 
-    # In your Listing model
     @property
     def primary_image(self):
         """Get the primary image or first image using ImageAsset model"""
@@ -177,7 +179,13 @@ class Listing(models.Model):
 
     @property
     def images(self):
-        """Get all images for this listing"""
+        """
+        Get all images for this listing.
+
+        UPDATED: Returns only THUMB and LARGE variants for optimized display.
+        - THUMB: Used for thumbnails gallery below the main image
+        - LARGE: Used for main image display when thumbnail is clicked
+        """
         image_groups = (
             ImageAsset.objects
             .filter(
@@ -192,10 +200,11 @@ class Listing(models.Model):
 
         images_list = []
         for group_id in image_groups:
-            # Get all variants for this group
+            # Get only THUMB and LARGE variants for this group
             group_images = ImageAsset.objects.filter(
                 image_group_id=group_id,
-                is_confirmed=True
+                is_confirmed=True,
+                variant__in=['thumb', 'large']  # Only thumb and large
             ).order_by('order')
 
             group_dict = {}
@@ -209,6 +218,7 @@ class Listing(models.Model):
                     'order': img.order
                 }
 
+            # Only add if we have both thumb and large (or at least one)
             if group_dict:
                 images_list.append(group_dict)
 
