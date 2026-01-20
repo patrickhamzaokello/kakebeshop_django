@@ -1,5 +1,5 @@
 # kakebe_apps/listings/models.py
-# UPDATED: Modified images property to return only thumb and large variants
+# FIXED: Removed duplicate images in the images property
 
 import uuid
 
@@ -182,10 +182,12 @@ class Listing(models.Model):
         """
         Get all images for this listing.
 
-        UPDATED: Returns only THUMB and LARGE variants for optimized display.
-        - THUMB: Used for thumbnails gallery below the main image
-        - LARGE: Used for main image display when thumbnail is clicked
+        FIXED: Returns only THUMB and LARGE variants without duplicates.
+        - Groups images by image_group_id
+        - Returns one entry per image group with thumb and large variants
         """
+        # Get unique image groups ordered by their order field
+        # FIXED: Use distinct() to prevent duplicate group IDs
         image_groups = (
             ImageAsset.objects
             .filter(
@@ -193,32 +195,54 @@ class Listing(models.Model):
                 object_id=self.id,
                 is_confirmed=True
             )
-            .order_by("order", "created_at")
-            .values_list("image_group_id", flat=True)
-            .distinct()
+            .values('image_group_id')  # Group by image_group_id
+            .annotate(
+                min_order=models.Min('order'),  # Get minimum order for each group
+                min_created=models.Min('created_at')  # Get earliest created_at
+            )
+            .order_by('min_order', 'min_created')
+            .values_list('image_group_id', flat=True)
         )
 
         images_list = []
         for group_id in image_groups:
-            # Get only THUMB and LARGE variants for this group
-            group_images = ImageAsset.objects.filter(
+            # Get only THUMB and LARGE variants for this specific group
+            thumb_image = ImageAsset.objects.filter(
                 image_group_id=group_id,
                 is_confirmed=True,
-                variant__in=['thumb', 'large']  # Only thumb and large
-            ).order_by('order')
+                variant='thumb'
+            ).first()
 
+            large_image = ImageAsset.objects.filter(
+                image_group_id=group_id,
+                is_confirmed=True,
+                variant='large'
+            ).first()
+
+            # Only add if we have at least one variant (preferably both)
             group_dict = {}
-            for img in group_images:
-                group_dict[img.variant] = {
-                    'id': str(img.id),
-                    'image': img.cdn_url(),
-                    'width': img.width,
-                    'height': img.height,
-                    'size_bytes': img.size_bytes,
-                    'order': img.order
+
+            if thumb_image:
+                group_dict['thumb'] = {
+                    'id': str(thumb_image.id),
+                    'image': thumb_image.cdn_url(),
+                    'width': thumb_image.width,
+                    'height': thumb_image.height,
+                    'size_bytes': thumb_image.size_bytes,
+                    'order': thumb_image.order
                 }
 
-            # Only add if we have both thumb and large (or at least one)
+            if large_image:
+                group_dict['large'] = {
+                    'id': str(large_image.id),
+                    'image': large_image.cdn_url(),
+                    'width': large_image.width,
+                    'height': large_image.height,
+                    'size_bytes': large_image.size_bytes,
+                    'order': large_image.order
+                }
+
+            # Only append if we have at least one of the variants
             if group_dict:
                 images_list.append(group_dict)
 
