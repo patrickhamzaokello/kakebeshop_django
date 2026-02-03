@@ -8,11 +8,13 @@ from .views import (
     SavedSearchViewSet, ConversationViewSet,
     MessageViewSet, ListingReviewViewSet,
     MerchantReviewViewSet, ReportViewSet, MerchantScoreViewSet,
-    ActivityLogViewSet, AuditLogViewSet, ApiUsageViewSet, UserIntentViewSet, OnboardingStatusViewSet, PushTokenViewSet
+    ActivityLogViewSet, AuditLogViewSet, ApiUsageViewSet, UserIntentViewSet, OnboardingStatusViewSet, PushTokenViewSet,
+    EnhancedSearchView
 )
 
 router = DefaultRouter()
 router.register(r'saved-searches', SavedSearchViewSet, basename='saved-search')
+
 router.register(r'conversations', ConversationViewSet, basename='conversation')
 router.register(r'listing-reviews', ListingReviewViewSet, basename='listing-review')
 router.register(r'merchant-reviews', MerchantReviewViewSet, basename='merchant-review')
@@ -36,4 +38,6 @@ conversations_router.register(r'messages', MessageViewSet, basename='conversatio
 urlpatterns = [
     path('', include(router.urls)),
     path('', include(conversations_router.urls)),
+    path('search/', EnhancedSearchView.as_view(), name='unified-search'),
+
 ]

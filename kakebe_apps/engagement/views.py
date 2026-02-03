@@ -21,6 +21,16 @@ from .serializers import (
     PushTokenSerializer, PushTokenCreateSerializer, PushTokenUpdateUsageSerializer
 )
 
+from django.db.models import Q, Value, CharField, F, Case, When, IntegerField
+from django.contrib.postgres.search import SearchVector, SearchQuery, SearchRank
+from rest_framework.views import APIView
+from rest_framework.response import Response
+from rest_framework import status
+from rest_framework.pagination import PageNumberPagination
+
+from kakebe_apps.listings.models import Listing
+from kakebe_apps.merchants.models import Merchant
+
 
 
 class SavedSearchViewSet(viewsets.ModelViewSet):
@@ -600,3 +610,333 @@ class PushTokenViewSet(viewsets.ModelViewSet):
             'message': 'Token reactivated successfully',
             'token': serializer.data
         }, status=status.HTTP_200_OK)
+
+
+
+
+
+class SearchPagination(PageNumberPagination):
+    """Custom pagination for search results"""
+    page_size = 20
+    page_size_query_param = 'page_size'
+    max_page_size = 100
+
+
+class EnhancedSearchView(APIView):
+    """
+    Enhanced search with relevance scoring across merchants and listings.
+    Returns active and verified results only.
+
+    Query Parameters:
+    - q: search query (required)
+    - type: filter by type ('merchant' or 'listing', optional)
+    - category: filter listings by category ID (optional)
+    - min_price: minimum price for listings (optional)
+    - max_price: maximum price for listings (optional)
+    - location: filter by location ID (optional)
+    - sort: sort order ('relevance', 'newest', 'price_asc', 'price_desc', 'rating')
+    - page: page number (default: 1)
+    - page_size: results per page (default: 20, max: 100)
+
+    Example: /api/search/?q=coffee&type=listing&category=uuid&sort=relevance&page=1
+    """
+
+    def get(self, request):
+        query = request.query_params.get('q', '').strip()
+        search_type = request.query_params.get('type', '').lower()
+        category_id = request.query_params.get('category')
+        min_price = request.query_params.get('min_price')
+        max_price = request.query_params.get('max_price')
+        location_id = request.query_params.get('location')
+        sort_by = request.query_params.get('sort', 'relevance')
+
+        if not query:
+            return Response(
+                {'error': 'Search query parameter "q" is required'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        # Validate search type
+        if search_type and search_type not in ['merchant', 'listing']:
+            return Response(
+                {'error': 'Invalid type. Must be "merchant" or "listing"'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        # Validate sort parameter
+        valid_sorts = ['relevance', 'newest', 'price_asc', 'price_desc', 'rating']
+        if sort_by not in valid_sorts:
+            return Response(
+                {'error': f'Invalid sort. Must be one of: {", ".join(valid_sorts)}'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        # Collect results
+        results = []
+
+        # Search merchants
+        if not search_type or search_type == 'merchant':
+            merchant_results = self._search_merchants(query, location_id)
+            results.extend(merchant_results)
+
+        # Search listings
+        if not search_type or search_type == 'listing':
+            listing_results = self._search_listings(
+                query,
+                category_id,
+                min_price,
+                max_price,
+                location_id
+            )
+            results.extend(listing_results)
+
+        # Sort results
+        results = self._sort_results(results, sort_by)
+
+        # Paginate
+        paginator = SearchPagination()
+        paginated_results = paginator.paginate_queryset(results, request)
+
+        # Add search metadata
+        response_data = {
+            'query': query,
+            'filters': {
+                'type': search_type or 'all',
+                'category': category_id,
+                'location': location_id,
+                'price_range': {
+                    'min': min_price,
+                    'max': max_price
+                } if min_price or max_price else None,
+            },
+            'sort': sort_by,
+        }
+
+        return paginator.get_paginated_response({
+            'metadata': response_data,
+            'results': paginated_results
+        })
+
+    def _search_merchants(self, query, location_id=None):
+        """Search for active and verified merchants with relevance scoring"""
+        # Build query
+        q_filter = Q(
+            Q(display_name__icontains=query) |
+            Q(business_name__icontains=query) |
+            Q(description__icontains=query)
+        )
+
+        # Base filters
+        merchants = Merchant.objects.filter(
+            q_filter,
+            status='ACTIVE',
+            verified=True,
+            deleted_at__isnull=True
+        )
+
+        # Location filter
+        if location_id:
+            merchants = merchants.filter(location_id=location_id)
+
+        # Add relevance scoring
+        merchants = merchants.annotate(
+            relevance_score=Case(
+                # Exact match in display name gets highest score
+                When(display_name__iexact=query, then=Value(100)),
+                # Display name starts with query
+                When(display_name__istartswith=query, then=Value(80)),
+                # Business name exact match
+                When(business_name__iexact=query, then=Value(90)),
+                # Business name starts with query
+                When(business_name__istartswith=query, then=Value(70)),
+                # Display name contains query
+                When(display_name__icontains=query, then=Value(60)),
+                # Business name contains query
+                When(business_name__icontains=query, then=Value(50)),
+                # Description contains query
+                When(description__icontains=query, then=Value(30)),
+                default=Value(10),
+                output_field=IntegerField(),
+            )
+        ).select_related('location', 'user')
+
+        results = []
+        for merchant in merchants:
+            results.append({
+                'type': 'merchant',
+                'id': str(merchant.id),
+                'title': merchant.display_name,
+                'business_name': merchant.business_name,
+                'description': self._truncate_text(merchant.description, 200),
+                'logo': merchant.logo,
+                'cover_image': merchant.cover_image,
+                'rating': float(merchant.rating),
+                'total_reviews': merchant.total_reviews,
+                'verified': merchant.verified,
+                'featured': merchant.featured,
+                'location': {
+                    'id': str(merchant.location.id) if merchant.location else None,
+                    'name': merchant.location.name if merchant.location else None,
+                } if merchant.location else None,
+                'created_at': merchant.created_at.isoformat(),
+                'relevance_score': merchant.relevance_score,
+            })
+
+        return results
+
+    def _search_listings(self, query, category_id=None, min_price=None,
+                         max_price=None, location_id=None):
+        """Search for active and verified listings with relevance scoring"""
+        # Build query
+        q_filter = Q(
+            Q(title__icontains=query) |
+            Q(description__icontains=query) |
+            Q(tags__name__icontains=query)
+        )
+
+        # Base filters
+        listings = Listing.objects.filter(
+            q_filter,
+            status='ACTIVE',
+            is_verified=True,
+            deleted_at__isnull=True
+        )
+
+        # Category filter
+        if category_id:
+            listings = listings.filter(category_id=category_id)
+
+        # Price filters
+        if min_price:
+            try:
+                min_price = float(min_price)
+                listings = listings.filter(
+                    Q(price__gte=min_price) |
+                    Q(price_min__gte=min_price)
+                )
+            except (ValueError, TypeError):
+                pass
+
+        if max_price:
+            try:
+                max_price = float(max_price)
+                listings = listings.filter(
+                    Q(price__lte=max_price) |
+                    Q(price_max__lte=max_price)
+                )
+            except (ValueError, TypeError):
+                pass
+
+        # Location filter (through merchant)
+        if location_id:
+            listings = listings.filter(merchant__location_id=location_id)
+
+        # Add relevance scoring
+        listings = listings.annotate(
+            relevance_score=Case(
+                # Exact title match
+                When(title__iexact=query, then=Value(100)),
+                # Title starts with query
+                When(title__istartswith=query, then=Value(80)),
+                # Title contains query
+                When(title__icontains=query, then=Value(60)),
+                # Description contains query
+                When(description__icontains=query, then=Value(40)),
+                # Tag matches
+                When(tags__name__icontains=query, then=Value(50)),
+                default=Value(10),
+                output_field=IntegerField(),
+            )
+        ).select_related(
+            'merchant',
+            'category',
+            'merchant__location'
+        ).prefetch_related('tags').distinct()
+
+        results = []
+        for listing in listings:
+            # Get tags
+            tags = [{'id': str(tag.id), 'name': tag.name} for tag in listing.tags.all()]
+
+            results.append({
+                'type': 'listing',
+                'id': str(listing.id),
+                'title': listing.title,
+                'description': self._truncate_text(listing.description, 200),
+                'listing_type': listing.listing_type,
+                'price_type': listing.price_type,
+                'price': float(listing.price) if listing.price else None,
+                'price_min': float(listing.price_min) if listing.price_min else None,
+                'price_max': float(listing.price_max) if listing.price_max else None,
+                'currency': listing.currency,
+                'is_price_negotiable': listing.is_price_negotiable,
+                'primary_image': listing.primary_image,
+                'is_featured': listing.is_featured,
+                'views_count': listing.views_count,
+                'category': {
+                    'id': str(listing.category.id),
+                    'name': listing.category.name,
+                } if listing.category else None,
+                'tags': tags,
+                'merchant': {
+                    'id': str(listing.merchant.id),
+                    'display_name': listing.merchant.display_name,
+                    'logo': listing.merchant.logo,
+                    'verified': listing.merchant.verified,
+                    'rating': float(listing.merchant.rating),
+                } if listing.merchant else None,
+                'location': {
+                    'id': str(listing.merchant.location.id) if listing.merchant.location else None,
+                    'name': listing.merchant.location.name if listing.merchant.location else None,
+                } if listing.merchant and listing.merchant.location else None,
+                'created_at': listing.created_at.isoformat(),
+                'relevance_score': listing.relevance_score,
+            })
+
+        return results
+
+    def _sort_results(self, results, sort_by):
+        """Sort results based on the specified criteria"""
+        if sort_by == 'relevance':
+            # Sort by relevance score (desc), then featured status, then rating
+            results.sort(
+                key=lambda x: (
+                    -x.get('relevance_score', 0),
+                    -int(x.get('is_featured', False) or x.get('featured', False)),
+                    -x.get('rating', 0)
+                )
+            )
+        elif sort_by == 'newest':
+            results.sort(key=lambda x: x['created_at'], reverse=True)
+        elif sort_by == 'rating':
+            # Only applicable to merchants and listings with merchant ratings
+            results.sort(
+                key=lambda x: (
+                    -x.get('rating', 0) if x['type'] == 'merchant'
+                    else -x.get('merchant', {}).get('rating', 0)
+                )
+            )
+        elif sort_by == 'price_asc':
+            # Only listings have prices
+            listings = [r for r in results if r['type'] == 'listing']
+            merchants = [r for r in results if r['type'] == 'merchant']
+            listings.sort(key=lambda x: x.get('price') or x.get('price_min') or float('inf'))
+            results = listings + merchants
+        elif sort_by == 'price_desc':
+            listings = [r for r in results if r['type'] == 'listing']
+            merchants = [r for r in results if r['type'] == 'merchant']
+            listings.sort(
+                key=lambda x: x.get('price') or x.get('price_max') or 0,
+                reverse=True
+            )
+            results = listings + merchants
+
+        return results
+
+    def _truncate_text(self, text, max_length):
+        """Truncate text to specified length with ellipsis"""
+        if not text:
+            return ""
+        if len(text) <= max_length:
+            return text
+        return text[:max_length].rsplit(' ', 1)[0] + '...'
