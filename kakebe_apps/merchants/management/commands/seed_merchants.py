@@ -112,28 +112,19 @@ class Command(BaseCommand):
         )
 
     def _get_or_create_locations(self):
-        """Get existing locations or create sample ones"""
-        locations = list(Location.objects.all())
+        """Get existing locations or prompt to seed them"""
+        locations = list(Location.objects.filter(is_active=True))
 
         if not locations:
-            self.stdout.write('No locations found. Creating sample locations...')
-
-            kampala_districts = [
-                'Central Division', 'Kawempe Division', 'Makindye Division',
-                'Nakawa Division', 'Rubaga Division'
-            ]
-
-            for district in kampala_districts:
-                location = Location.objects.create(
-                    name=district,
-                    district='Kampala',
-                    region='Central',
-                    country='Uganda'
+            self.stdout.write(
+                self.style.WARNING(
+                    'No locations found. Please run: python manage.py seed_locations'
                 )
-                locations.append(location)
+            )
+            self.stdout.write('Continuing without location assignment...')
+            return []
 
-            self.stdout.write(self.style.SUCCESS(f'✓ Created {len(locations)} locations'))
-
+        self.stdout.write(f'Found {len(locations)} locations')
         return locations
 
     def _get_or_create_users(self, count):
@@ -143,13 +134,13 @@ class Command(BaseCommand):
         for i in range(count):
             username = f'merchant_user_{i + 1}'
             email = f'merchant{i + 1}@kakebe.ug'
+            name = f'Merchant User {i + 1}'
 
             user, created = User.objects.get_or_create(
                 username=username,
                 defaults={
                     'email': email,
-                    'first_name': f'Merchant',
-                    'last_name': f'User {i + 1}',
+                    'name': name,
                 }
             )
 
