@@ -776,7 +776,7 @@ class EnhancedSearchView(APIView):
                 'featured': merchant.featured,
                 'location': {
                     'id': str(merchant.location.id) if merchant.location else None,
-                    'name': merchant.location.name if merchant.location else None,
+                    'name': merchant.location.district if merchant.location else None,
                 } if merchant.location else None,
                 'created_at': merchant.created_at.isoformat(),
                 'relevance_score': merchant.relevance_score,
