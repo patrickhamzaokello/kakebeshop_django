@@ -231,7 +231,9 @@ class CategoryViewSet(viewsets.ModelViewSet):
         # Get listings for this category
         listings_qs = Listing.objects.filter(
             category=category,
-            is_active=True
+            status='ACTIVE',
+            is_verified=True,
+            deleted_at__isnull=True
         ).select_related('merchant', 'category').order_by('-created_at')
 
         # Apply search if provided
