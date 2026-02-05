@@ -72,12 +72,19 @@ class Command(BaseCommand):
                 is_verified = random.randint(1, 100) <= verified_percentage
                 is_featured = random.randint(1, 100) <= featured_percentage and is_verified
 
+                # Format names
+                display_name = template['display_name'].format(i + 1) if '{}' in template['display_name'] else template[
+                    'display_name']
+                business_name = None
+                if template.get('business_name'):
+                    business_name = template['business_name'].format(i + 1) if '{}' in template['business_name'] else \
+                    template['business_name']
+
                 # Create merchant
                 merchant = Merchant.objects.create(
                     user=users[i],
-                    display_name=template['display_name'].format(num=i + 1),
-                    business_name=template['business_name'].format(num=i + 1) if template.get(
-                        'business_name') else None,
+                    display_name=display_name,
+                    business_name=business_name,
                     description=template['description'],
                     business_phone=self._generate_ugandan_phone(),
                     business_email=f"business{i + 1}@{template['email_domain']}",
@@ -183,7 +190,7 @@ class Command(BaseCommand):
                 'email_domain': 'eliteboutique.ug',
             },
             {
-                'display_name': 'Kampala Fashion Store {}',
+                'display_name': 'Kampala Fashion Store',
                 'business_name': None,
                 'description': 'Affordable and trendy fashion for the modern Ugandan. From casual wear to office attire, we have it all.',
                 'email_domain': 'kampalafashion.ug',
@@ -203,7 +210,7 @@ class Command(BaseCommand):
                 'email_domain': 'digitalworld.ug',
             },
             {
-                'display_name': 'Gadgets Palace {}',
+                'display_name': 'Gadgets Palace',
                 'business_name': None,
                 'description': 'Latest tech gadgets and accessories. Fast delivery within Kampala and nationwide shipping available.',
                 'email_domain': 'gadgetspalace.ug',
@@ -217,7 +224,7 @@ class Command(BaseCommand):
                 'email_domain': 'mamaskitchen.ug',
             },
             {
-                'display_name': 'Rolex Express {}',
+                'display_name': 'Rolex Express',
                 'business_name': None,
                 'description': 'The best rolex in town! Fresh ingredients, generous portions, and fast service. Open daily from 6 AM to 10 PM.',
                 'email_domain': 'rolexexpress.ug',
@@ -237,7 +244,7 @@ class Command(BaseCommand):
                 'email_domain': 'glowbeauty.ug',
             },
             {
-                'display_name': 'Queen\'s Touch Salon {}',
+                'display_name': 'Queen\'s Touch Salon',
                 'business_name': None,
                 'description': 'Affordable beauty services for the modern woman. Expert stylists, quality products, and a relaxing atmosphere.',
                 'email_domain': 'queenstouch.ug',
@@ -313,7 +320,7 @@ class Command(BaseCommand):
                 'email_domain': 'littleangels.ug',
             },
             {
-                'display_name': 'Kidz World {}',
+                'display_name': 'Kidz World',
                 'business_name': None,
                 'description': 'Fun and educational toys, clothing, and accessories for children of all ages. Visit our showroom today!',
                 'email_domain': 'kidzworld.ug',
@@ -327,7 +334,7 @@ class Command(BaseCommand):
                 'email_domain': 'africancrafts.ug',
             },
             {
-                'display_name': 'Creative Hands Studio {}',
+                'display_name': 'Creative Hands Studio',
                 'business_name': None,
                 'description': 'Custom artwork, handmade gifts, and creative workshops. Perfect for unique presents and home decor.',
                 'email_domain': 'creativehands.ug',
