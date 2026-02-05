@@ -4,6 +4,7 @@ from rest_framework.response import Response
 from rest_framework.pagination import PageNumberPagination
 from django_filters.rest_framework import DjangoFilterBackend
 from django.db.models import Count, Q
+from django.shortcuts import get_object_or_404
 from .models import Category, Tag
 from .serializers import (
     CategoryListSerializer,
@@ -14,6 +15,8 @@ from .serializers import (
     TagSerializer,
     TagCreateSerializer,
 )
+from ..listings.models import Listing
+from ..listings.serializers import ListingListSerializer
 
 
 class StandardResultsSetPagination(PageNumberPagination):
@@ -44,20 +47,22 @@ class CategoryViewSet(viewsets.ModelViewSet):
 
     Public endpoints (GET):
     - list: GET /categories/ - Paginated list of all active categories
-    - retrieve: GET /categories/{slug}/ - Detailed view with children and breadcrumbs
+    - retrieve: GET /categories/{id}/ - Detailed view with children and breadcrumbs
     - featured: GET /categories/featured/ - Featured parent categories
     - tree: GET /categories/tree/ - Hierarchical tree structure
-    - subcategories: GET /categories/subcategories/{parent_id}/ - Paginated subcategories
+    - subcategories: GET /categories/{id}/subcategories/ - Up to 14 subcategories
+    - listings: GET /categories/{id}/listings/ - All listings in category
+    - details: GET /categories/{id}/details/ - Category details
     - parents: GET /categories/parents/ - All parent categories
 
     Admin endpoints (POST/PATCH/DELETE) - requires staff authentication:
     - create: POST /categories/ - Create new category
-    - update: PATCH /categories/{slug}/ - Update category
-    - partial_update: PATCH /categories/{slug}/ - Partial update
-    - destroy: DELETE /categories/{slug}/ - Delete category
+    - update: PATCH /categories/{id}/ - Update category
+    - partial_update: PATCH /categories/{id}/ - Partial update
+    - destroy: DELETE /categories/{id}/ - Delete category
     """
     permission_classes = [IsAdminOrReadOnly]
-    lookup_field = 'slug'
+    lookup_field = 'id'  # Changed from 'slug' to 'id'
     filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
     search_fields = ['name', 'description']
     ordering_fields = ['name', 'sort_order', 'created_at']
@@ -191,41 +196,95 @@ class CategoryViewSet(viewsets.ModelViewSet):
         serializer = CategoryTreeSerializer(categories, many=True)
         return Response(serializer.data)
 
-    @action(detail=False, methods=['get'], url_path='subcategories/(?P<parent_id>[^/.]+)')
-    def subcategories(self, request, parent_id=None):
+    @action(detail=True, methods=['get'])
+    def subcategories(self, request, id=None):
         """
-        Get paginated subcategories of a specific parent category by ID
-        Query: GET /categories/subcategories/{parent_id}/
-        Supports pagination, search, and ordering
+        Get up to 14 subcategories of a specific category
+        Query: GET /categories/{id}/subcategories/
         """
-        try:
-            parent = Category.objects.get(id=parent_id, is_active=True)
-        except Category.DoesNotExist:
-            return Response(
-                {'error': 'Parent category not found'},
-                status=status.HTTP_404_NOT_FOUND
-            )
+        category = self.get_object()
 
-        queryset = Category.objects.filter(
+        subcategories = Category.objects.filter(
             is_active=True,
-            parent=parent
+            parent=category
         ).annotate(
             children_count=Count('children', filter=Q(children__is_active=True))
-        ).order_by('sort_order', 'name')
+        ).order_by('sort_order', 'name')[:14]
+
+        serializer = CategoryListSerializer(subcategories, many=True, context={'request': request})
+        return Response({
+            'category_id': str(category.id),
+            'category_name': category.name,
+            'subcategories': serializer.data,
+            'total_count': len(subcategories)
+        })
+
+    @action(detail=True, methods=['get'])
+    def listings(self, request, id=None):
+        """
+        Get all listings for a specific category (paginated)
+        Query: GET /categories/{id}/listings/
+        Optional params: ?page=1&page_size=20&search=query
+        """
+        category = self.get_object()
+
+        # Get listings for this category
+        listings_qs = Listing.objects.filter(
+            category=category,
+            is_active=True
+        ).select_related('merchant', 'category').order_by('-created_at')
 
         # Apply search if provided
         search = request.query_params.get('search', None)
         if search:
-            queryset = queryset.filter(name__icontains=search)
+            listings_qs = listings_qs.filter(
+                Q(title__icontains=search) |
+                Q(description__icontains=search)
+            )
 
         # Paginate
-        page = self.paginate_queryset(queryset)
+        page = self.paginate_queryset(listings_qs)
         if page is not None:
-            serializer = CategoryListSerializer(page, many=True)
-            return self.get_paginated_response(serializer.data)
+            serializer = ListingListSerializer(page, many=True, context={'request': request})
+            response_data = self.get_paginated_response(serializer.data).data
+            response_data['category_id'] = str(category.id)
+            response_data['category_name'] = category.name
+            return Response(response_data)
 
-        serializer = CategoryListSerializer(queryset, many=True)
-        return Response(serializer.data)
+        serializer = ListingListSerializer(listings_qs, many=True, context={'request': request})
+        return Response({
+            'category_id': str(category.id),
+            'category_name': category.name,
+            'listings': serializer.data,
+            'total_count': listings_qs.count()
+        })
+
+    @action(detail=True, methods=['get'])
+    def details(self, request, id=None):
+        """
+        Get category details (name, description, etc.)
+        Query: GET /categories/{id}/details/
+        """
+        category = self.get_object()
+
+        return Response({
+            'id': str(category.id),
+            'name': category.name,
+            'slug': category.slug,
+            'icon': category.icon,
+            'description': category.description,
+            'parent_id': str(category.parent.id) if category.parent else None,
+            'parent_name': category.parent.name if category.parent else None,
+            'allows_order_intent': category.allows_order_intent,
+            'allows_cart': category.allows_cart,
+            'is_contact_only': category.is_contact_only,
+            'is_featured': category.is_featured,
+            'sort_order': category.sort_order,
+            'is_active': category.is_active,
+            'children_count': category.children.filter(is_active=True).count(),
+            'created_at': category.created_at,
+            'updated_at': category.updated_at
+        })
 
     @action(detail=False, methods=['get'])
     def parents(self, request):
@@ -251,17 +310,17 @@ class TagViewSet(viewsets.ModelViewSet):
 
     Public endpoints (GET):
     - list: GET /tags/ - Paginated list of all tags
-    - retrieve: GET /tags/{slug}/ - Single tag details
+    - retrieve: GET /tags/{id}/ - Single tag details
 
     Admin endpoints (POST/PATCH/DELETE) - requires staff authentication:
     - create: POST /tags/ - Create new tag
-    - update: PATCH /tags/{slug}/ - Update tag
-    - partial_update: PATCH /tags/{slug}/ - Partial update
-    - destroy: DELETE /tags/{slug}/ - Delete tag
+    - update: PATCH /tags/{id}/ - Update tag
+    - partial_update: PATCH /tags/{id}/ - Partial update
+    - destroy: DELETE /tags/{id}/ - Delete tag
     """
     queryset = Tag.objects.all().order_by('name')
     permission_classes = [IsAdminOrReadOnly]
-    lookup_field = 'slug'
+    lookup_field = 'id'  # Changed from 'slug' to 'id'
     filter_backends = [DjangoFilterBackend, filters.SearchFilter]
     search_fields = ['name', 'slug']
     pagination_class = StandardResultsSetPagination
