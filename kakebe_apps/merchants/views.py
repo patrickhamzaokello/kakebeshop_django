@@ -22,6 +22,13 @@ class MerchantPagination(PageNumberPagination):
     max_page_size = 100
 
 
+class ListingPagination(PageNumberPagination):
+    """Custom pagination for merchant listings"""
+    page_size = 20
+    page_size_query_param = 'page_size'
+    max_page_size = 100
+
+
 class IsMerchantOwner(permissions.BasePermission):
     """Custom permission: only the owner can edit their merchant profile"""
 
@@ -37,6 +44,7 @@ class MerchantViewSet(viewsets.ViewSet):
     - list: GET /merchants/ - Paginated list of verified, active merchants
     - retrieve: GET /merchants/{id}/ - Public merchant profile
     - featured: GET /merchants/featured/ - Shuffled featured merchants
+    - listings: GET /merchants/{id}/listings/ - Paginated active listings for a merchant
 
     Authenticated endpoints:
     - me: GET /merchants/me/ - Get own merchant profile
@@ -127,6 +135,67 @@ class MerchantViewSet(viewsets.ViewSet):
         queryset = self.get_queryset().filter(featured=True).order_by('?')[:limit]
 
         serializer = MerchantListSerializer(
+            queryset, many=True, context={'request': request}
+        )
+        return Response(serializer.data)
+
+    @action(detail=True, methods=['get'], url_path='listings')
+    def listings(self, request, pk=None):
+        """
+        Get paginated active listings for a specific merchant.
+
+        Only returns listings with status='ACTIVE' and is_verified=True.
+        The merchant itself must also be verified and active.
+
+        Query params:
+        - page: Page number (default: 1)
+        - page_size: Results per page (default: 20, max: 100)
+        - listing_type: Filter by type - 'PRODUCT' or 'SERVICE'
+        - sort_by: One of 'created_at', '-created_at', 'price', '-price',
+                   'views_count', '-views_count' (default: '-created_at')
+        """
+        # Ensure the merchant exists and is publicly visible
+        merchant = get_object_or_404(self.get_queryset(), pk=pk)
+
+        # Import here to avoid circular imports
+        from kakebe_apps.listings.models import Listing
+        from kakebe_apps.listings.serializers import ListingListSerializer
+
+        queryset = Listing.objects.filter(
+            merchant=merchant,
+            status='ACTIVE',
+            is_verified=True,
+            deleted_at__isnull=True
+        ).select_related('merchant', 'category')
+
+        # Filter by listing type
+        listing_type = request.query_params.get('listing_type', None)
+        if listing_type and listing_type in ('PRODUCT', 'SERVICE'):
+            queryset = queryset.filter(listing_type=listing_type)
+
+        # Sorting
+        sort_by = request.query_params.get('sort_by', '-created_at')
+        valid_sort_fields = [
+            'created_at', '-created_at',
+            'price', '-price',
+            'views_count', '-views_count',
+        ]
+        if sort_by in valid_sort_fields:
+            queryset = queryset.order_by(sort_by)
+        else:
+            queryset = queryset.order_by('-created_at')
+
+        # Apply pagination
+        paginator = ListingPagination()
+        page = paginator.paginate_queryset(queryset, request)
+
+        if page is not None:
+            serializer = ListingListSerializer(
+                page, many=True, context={'request': request}
+            )
+            return paginator.get_paginated_response(serializer.data)
+
+        serializer = ListingListSerializer(
             queryset, many=True, context={'request': request}
         )
         return Response(serializer.data)
