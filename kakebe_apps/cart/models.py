@@ -52,7 +52,10 @@ class Cart(models.Model):
 
     @property
     def total_price(self):
-        total = sum(item.listing.price * item.quantity for item in self.items.all())
+        total = 0
+        for item in self.items.all():
+            if item.listing.price is not None:
+                total += item.listing.price * item.quantity
         return total
 
 
@@ -77,6 +80,8 @@ class CartItem(models.Model):
 
     @property
     def subtotal(self):
+        if self.listing.price is None:
+            return None
         return self.listing.price * self.quantity
 
 

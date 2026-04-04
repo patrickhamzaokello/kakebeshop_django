@@ -24,7 +24,10 @@ class CartAdmin(admin.ModelAdmin):
     total_items.short_description = 'Total Items'
 
     def total_price(self, obj):
-        return f"${obj.total_price:.2f}"
+        try:
+            return f"${obj.total_price:.2f}"
+        except (TypeError, AttributeError):
+            return "N/A"
     total_price.short_description = 'Total Price'
 
 
@@ -41,7 +44,10 @@ class CartItemAdmin(admin.ModelAdmin):
     cart_user.short_description = 'User'
 
     def subtotal(self, obj):
-        return f"${obj.subtotal:.2f}"
+        subtotal = obj.subtotal
+        if subtotal is None:
+            return f"Range ({obj.listing.price_min} - {obj.listing.price_max})"
+        return f"${subtotal:.2f}"
     subtotal.short_description = 'Subtotal'
 
 

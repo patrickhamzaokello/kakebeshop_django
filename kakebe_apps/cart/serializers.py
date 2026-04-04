@@ -9,7 +9,7 @@ class ListingBasicSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Listing
-        fields = ['id', 'title', 'price', 'primary_image', 'status', 'is_active']
+        fields = ['id', 'title', 'price_type', 'price', 'price_min', 'price_max', 'currency', 'primary_image', 'status', 'is_active']
 
     def get_primary_image(self, obj):
         """
@@ -67,7 +67,7 @@ class CartItemSerializer(serializers.ModelSerializer):
         read_only_fields = ['id', 'created_at', 'updated_at']
 
     def get_subtotal(self, obj):
-        """Calculate subtotal for this cart item"""
+        """Calculate subtotal for this cart item. None if listing has no fixed price."""
         return obj.subtotal
 
 
@@ -93,9 +93,13 @@ class AddToCartSerializer(serializers.Serializer):
     def validate_listing_id(self, value):
         try:
             listing = Listing.objects.get(id=value)
-            # Check if listing is active
             if not listing.is_active:
                 raise serializers.ValidationError("This listing is no longer available.")
+            if listing.price_type != 'FIXED':
+                raise serializers.ValidationError(
+                    "Only listings with a fixed price can be added to the cart. "
+                    "Please contact the merchant directly for price range or on-request listings."
+                )
         except Listing.DoesNotExist:
             raise serializers.ValidationError("Listing not found.")
         return value
