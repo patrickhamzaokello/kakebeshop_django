@@ -185,6 +185,36 @@ class OrderIntentViewSet(viewsets.ModelViewSet):
                 'error': str(e)
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
+    @action(detail=True, methods=['post'], url_path='confirm')
+    def confirm(self, request, pk=None):
+        """
+        Merchant confirms an order.
+        POST /api/v1/orders/orders/{id}/confirm/
+        """
+        order = self.get_object()
+
+        if not hasattr(request.user, 'merchant_profile') or order.merchant != request.user.merchant_profile:
+            return Response({
+                'success': False,
+                'error': 'Only the merchant can confirm this order'
+            }, status=status.HTTP_403_FORBIDDEN)
+
+        if order.status not in ['NEW', 'CONTACTED']:
+            return Response({
+                'success': False,
+                'error': f'Cannot confirm an order with status {order.status}'
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+        order.status = 'CONFIRMED'
+        order.save()
+
+        serializer = self.get_serializer(order)
+        return Response({
+            'success': True,
+            'message': 'Order confirmed successfully',
+            'data': serializer.data
+        })
+
     @action(detail=True, methods=['post'], url_path='update-status')
     def update_status(self, request, pk=None):
         """
