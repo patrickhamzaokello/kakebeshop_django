@@ -838,7 +838,7 @@ class UserProfileView(generics.RetrieveUpdateAPIView):
                 'message': 'Please try again later'
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
-    @action(detail=False, methods=['post'], permission_classes=[permissions.IsAuthenticated], url_path='me/update-profile-image')
+    @action(detail=False, methods=['post'], permission_classes=[permissions.IsAuthenticated], url_path='/update-profile-image')
     def update_profile_image(self, request):
         """
         Set Profile logo from a previously uploaded image group.
