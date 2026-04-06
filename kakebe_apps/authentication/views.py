@@ -3,8 +3,6 @@ from django.shortcuts import render
 from rest_framework import generics, status, views, permissions
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.exceptions import ValidationError
-from rest_framework.decorators import action
-from django.shortcuts import get_object_or_404
 
 
 from .email_templates import get_email_template
@@ -802,6 +800,79 @@ class GetPhoneStatusView(views.APIView):
                 'message': 'Please try again later'
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
+class UpdateProfileImageView(views.APIView):
+    """
+    Update authenticated user's profile image using a confirmed image_group_id.
+    """
+    permission_classes = [IsAuthenticated]
+
+    @swagger_auto_schema(
+        operation_description="Update authenticated user's profile image",
+        request_body=openapi.Schema(
+            type=openapi.TYPE_OBJECT,
+            required=['image_group_id'],
+            properties={
+                'image_group_id': openapi.Schema(
+                    type=openapi.TYPE_STRING,
+                    format='uuid',
+                    description='Confirmed profile image group id'
+                )
+            }
+        ),
+        responses={
+            200: "Profile image updated successfully",
+            404: "No confirmed profile image found",
+            400: "Validation error"
+        }
+    )
+    def post(self, request):
+        try:
+            user = request.user
+            image_group_id = request.data.get("image_group_id")
+
+            if not image_group_id:
+                return Response({
+                    "error": "Validation failed",
+                    "details": {
+                        "image_group_id": ["This field is required."]
+                    }
+                }, status=status.HTTP_400_BAD_REQUEST)
+
+            from kakebe_apps.imagehandler.models import ImageAsset
+
+            assets = ImageAsset.objects.filter(
+                image_group_id=image_group_id,
+                owner=request.user,
+                image_type='profile',
+                is_confirmed=True
+            )
+
+            if not assets.exists():
+                return Response(
+                    {
+                        "error": "No confirmed profile image found for this image_group_id."
+                    },
+                    status=status.HTTP_404_NOT_FOUND
+                )
+
+            assets.update(object_id=user.id)
+
+            asset = assets.filter(variant='medium').first() or assets.first()
+            user.profile_image = asset.cdn_url()
+            user.save(update_fields=['profile_image', 'updated_at'])
+
+            return Response({
+                "success": True,
+                "message": "Profile image updated successfully",
+                "profile_image": user.profile_image
+            }, status=status.HTTP_200_OK)
+
+        except Exception as e:
+            logger.error(f"Error updating profile image: {str(e)}", exc_info=True)
+            return Response({
+                "error": "Failed to update profile image",
+                "message": "Please try again later"
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 class UserProfileView(generics.RetrieveUpdateAPIView):
     """
@@ -837,46 +908,6 @@ class UserProfileView(generics.RetrieveUpdateAPIView):
                 'error': 'Failed to retrieve profile',
                 'message': 'Please try again later'
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-
-    @action(detail=False, methods=['post'], permission_classes=[permissions.IsAuthenticated], url_path='/update-profile-image')
-    def update_profile_image(self, request):
-        """
-        Set Profile logo from a previously uploaded image group.
-
-        Expects a confirmed 'profile' image uploaded via the standard
-        presign → upload → confirm flow.
-
-        Body: { "image_group_id": "<uuid>" }
-        """
-        user = get_object_or_404(User, user=request.user)
-
-        serializer = UserProfileSerializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
-        image_group_id = serializer.validated_data['image_group_id']
-
-        from kakebe_apps.imagehandler.models import ImageAsset
-
-        assets = ImageAsset.objects.filter(
-            image_group_id=image_group_id,
-            owner=request.user,
-            image_type='profile',
-            is_confirmed=True
-        )
-        if not assets.exists():
-            return Response(
-                {'detail': 'No confirmed profile image found for this image_group_id.'},
-                status=status.HTTP_404_NOT_FOUND
-            )
-
-        # Attach assets to this merchant
-        assets.update(object_id=user.id)
-
-        # Prefer medium variant for the profile_image URL, fall back to thumb
-        asset = assets.filter(variant='medium').first() or assets.first()
-        user.profile_image = asset.cdn_url()
-        user.save(update_fields=['profile_image', 'updated_at'])
-
-        return Response(UserProfileSerializer(user, context={'request': request}).data)
 
     def update(self, request, *args, **kwargs):
         """Update user profile"""

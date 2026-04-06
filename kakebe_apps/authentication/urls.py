@@ -2,7 +2,7 @@ from django.urls import path
 from .views import RegisterView, LogoutAPIView, SetNewPasswordAPIView, LoginAPIView, \
     RequestPasswordResetEmail, VerifyResetCodeAPIView, VerifyEmailAPIView, ResendVerificationCodeAPIView, \
     AddPhoneNumberView, VerifyPhoneNumberView, ResendPhoneVerificationView, UpdatePhoneNumberView, \
-    RemovePhoneNumberView, GetPhoneStatusView, UserProfileView
+    RemovePhoneNumberView, GetPhoneStatusView, UserProfileView, UpdateProfileImageView
 from rest_framework_simplejwt.views import (
     TokenRefreshView,
 )
@@ -33,4 +33,6 @@ urlpatterns = [
     path('phone/status/', GetPhoneStatusView.as_view(), name='phone_status'),
 
     path('profile/', UserProfileView.as_view(), name='user-profile'),
+    path('profile/image/', UpdateProfileImageView.as_view(), name='update-profile-image'),
+
 ]
