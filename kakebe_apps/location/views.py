@@ -23,8 +23,7 @@ class UserAddressViewSet(viewsets.ModelViewSet):
         ).order_by('-is_default', '-created_at')
 
     def get_serializer_class(self):
-        """Use different serializer for creation"""
-        if self.action == 'create':
+        if self.action in ('create', 'update', 'partial_update'):
             return AddressCreateSerializer
         return UserAddressSerializer
 
@@ -64,26 +63,32 @@ class UserAddressViewSet(viewsets.ModelViewSet):
         )
 
     def update(self, request, *args, **kwargs):
-        """Update an address"""
+        """
+        Update an address.
+        PUT  /api/v1/addresses/{id}/   — full update
+        PATCH /api/v1/addresses/{id}/  — partial update
+        """
         partial = kwargs.pop('partial', False)
         instance = self.get_object()
 
-        # Ensure user owns this address
         if instance.user != request.user:
             return Response(
                 {'error': 'You do not have permission to edit this address'},
                 status=status.HTTP_403_FORBIDDEN
             )
 
-        serializer = self.get_serializer(
-            instance,
-            data=request.data,
-            partial=partial
-        )
+        serializer = self.get_serializer(instance, data=request.data, partial=partial)
         serializer.is_valid(raise_exception=True)
-        self.perform_update(serializer)
 
-        return Response(serializer.data)
+        # If is_default is being set to True, unset all other defaults first
+        if serializer.validated_data.get('is_default'):
+            UserAddress.objects.filter(
+                user=request.user, is_default=True
+            ).exclude(id=instance.id).update(is_default=False)
+
+        instance = serializer.save()
+
+        return Response(UserAddressSerializer(instance).data)
 
     def destroy(self, request, *args, **kwargs):
         """Delete an address"""
@@ -114,30 +119,36 @@ class UserAddressViewSet(viewsets.ModelViewSet):
         self.perform_destroy(instance)
         return Response(status=status.HTTP_204_NO_CONTENT)
 
-    @action(detail=True, methods=['post'], url_path='set-default')
-    def set_default(self, request, pk=None):
-        """Set an address as default"""
+    def _do_set_default(self, request, pk=None):
+        """Shared logic for setting an address as default."""
         address = self.get_object()
 
-        # Ensure user owns this address
         if address.user != request.user:
             return Response(
                 {'error': 'You do not have permission to modify this address'},
                 status=status.HTTP_403_FORBIDDEN
             )
 
-        # Unset all other default addresses
         UserAddress.objects.filter(
             user=request.user,
             is_default=True
         ).exclude(id=address.id).update(is_default=False)
 
-        # Set this as default
         address.is_default = True
         address.save()
 
         serializer = self.get_serializer(address)
         return Response(serializer.data)
+
+    @action(detail=True, methods=['post'], url_path='set-default')
+    def set_default(self, request, pk=None):
+        """POST /api/v1/addresses/{id}/set-default/"""
+        return self._do_set_default(request, pk)
+
+    @action(detail=True, methods=['post'], url_path='')
+    def post_detail(self, request, pk=None):
+        """POST /api/v1/addresses/{id}/ — sets the address as default."""
+        return self._do_set_default(request, pk)
 
     @action(detail=False, methods=['get'], url_path='default')
     def get_default(self, request):
