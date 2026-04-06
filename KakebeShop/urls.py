@@ -54,7 +54,7 @@ urlpatterns = [
         path('', include('kakebe_apps.merchants.urls')),
 
         path('', include('kakebe_apps.cart.urls')),
-        path('', include('kakebe_apps.orders.urls')),
+        path('orders/', include('kakebe_apps.orders.urls')),
         path('', include('kakebe_apps.transactions.urls')),
         path('', include('kakebe_apps.engagement.urls')),
         path('', include('kakebe_apps.promotions.urls')),
