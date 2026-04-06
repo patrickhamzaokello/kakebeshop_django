@@ -107,14 +107,16 @@ class UserAddressViewSet(viewsets.ModelViewSet):
                 user=request.user
             ).exclude(id=instance.id)
 
-            if other_addresses.exists():
-                # Set another address as default
-                other_addresses.first().update(is_default=True)
-            elif other_addresses.count() == 0:
+            if not other_addresses.exists():
                 return Response(
                     {'error': 'Cannot delete your only address'},
                     status=status.HTTP_400_BAD_REQUEST
                 )
+
+            # Promote the next address to default
+            next_address = other_addresses.first()
+            next_address.is_default = True
+            next_address.save(update_fields=['is_default'])
 
         self.perform_destroy(instance)
         return Response(status=status.HTTP_204_NO_CONTENT)
