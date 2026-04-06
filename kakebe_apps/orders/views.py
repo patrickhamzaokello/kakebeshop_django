@@ -215,6 +215,36 @@ class OrderIntentViewSet(viewsets.ModelViewSet):
             'data': serializer.data
         })
 
+    @action(detail=True, methods=['post'], url_path='complete')
+    def complete(self, request, pk=None):
+        """
+        Merchant marks an order as completed.
+        POST /api/v1/orders/orders/{id}/complete/
+        """
+        order = self.get_object()
+
+        if not hasattr(request.user, 'merchant_profile') or order.merchant != request.user.merchant_profile:
+            return Response({
+                'success': False,
+                'error': 'Only the merchant can complete this order'
+            }, status=status.HTTP_403_FORBIDDEN)
+
+        if order.status not in ['CONFIRMED']:
+            return Response({
+                'success': False,
+                'error': f'Cannot complete an order with status {order.status}. Order must be CONFIRMED first.'
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+        order.status = 'COMPLETED'
+        order.save()
+
+        serializer = self.get_serializer(order)
+        return Response({
+            'success': True,
+            'message': 'Order completed successfully',
+            'data': serializer.data
+        })
+
     @action(detail=True, methods=['post'], url_path='update-status')
     def update_status(self, request, pk=None):
         """

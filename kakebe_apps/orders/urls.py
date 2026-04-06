@@ -20,6 +20,7 @@ GET    /api/v1/orders/orders/                    - List all orders
 GET    /api/v1/orders/orders/{id}/               - Get single order
 GET    /api/v1/orders/orders/my_orders/          - Get filtered orders
 POST   /api/v1/orders/orders/{id}/confirm/       - Confirm order (merchant)
+POST   /api/v1/orders/orders/{id}/complete/      - Complete order (merchant)
 POST   /api/v1/orders/orders/{id}/update_status/ - Update order status (merchant)
 POST   /api/v1/orders/orders/{id}/cancel/        - Cancel order (buyer)
 
