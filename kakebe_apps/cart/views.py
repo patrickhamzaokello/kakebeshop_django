@@ -186,10 +186,22 @@ class WishlistViewSet(viewsets.ViewSet):
         return wishlist
 
     def list(self, request):
-        """Get user's wishlist with all items"""
+        """
+        GET /api/v1/wishlist/?page=1
+        Returns paginated wishlist items: { results: [...], next, previous, count }
+        """
         wishlist = self.get_or_create_wishlist(request.user)
-        serializer = WishlistSerializer(wishlist)
-        return Response(serializer.data)
+        items = wishlist.items.select_related('listing__merchant', 'listing__category').order_by('-created_at')
+
+        paginator = self.pagination_class()
+        page = paginator.paginate_queryset(items, request)
+
+        if page is not None:
+            serializer = WishlistItemSerializer(page, many=True)
+            return paginator.get_paginated_response(serializer.data)
+
+        serializer = WishlistItemSerializer(items, many=True)
+        return Response({'results': serializer.data, 'next': None})
 
     @action(detail=False, methods=['get'])
     def items(self, request):

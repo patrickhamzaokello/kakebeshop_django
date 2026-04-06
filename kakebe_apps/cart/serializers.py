@@ -109,8 +109,42 @@ class UpdateCartItemSerializer(serializers.Serializer):
     quantity = serializers.IntegerField(min_value=1)
 
 
+class WishlistListingSerializer(serializers.ModelSerializer):
+    """Listing serializer shaped to match the frontend WishlistItem.listing interface."""
+    merchant = serializers.SerializerMethodField()
+    category_name = serializers.CharField(source='category.name', read_only=True)
+    primary_image = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Listing
+        fields = [
+            'id', 'merchant', 'title', 'listing_type', 'category_name',
+            'price_type', 'price', 'price_min', 'price_max', 'currency',
+            'is_featured', 'is_verified', 'views_count', 'primary_image',
+            'created_at',
+        ]
+
+    def get_merchant(self, obj):
+        return {
+            'id': str(obj.merchant.id),
+            'display_name': obj.merchant.display_name,
+        }
+
+    def get_primary_image(self, obj):
+        primary_img = obj.primary_image
+        if primary_img and isinstance(primary_img, dict):
+            return {
+                'id': primary_img.get('id'),
+                'image': primary_img.get('image'),
+                'width': primary_img.get('width'),
+                'height': primary_img.get('height'),
+                'variant': primary_img.get('variant', 'thumb'),
+            }
+        return None
+
+
 class WishlistItemSerializer(serializers.ModelSerializer):
-    listing = ListingBasicSerializer(read_only=True)
+    listing = WishlistListingSerializer(read_only=True)
 
     class Meta:
         model = WishlistItem
