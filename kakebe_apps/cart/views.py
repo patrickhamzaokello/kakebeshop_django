@@ -255,15 +255,21 @@ class WishlistViewSet(viewsets.ViewSet):
 
     @action(detail=False, methods=['delete'], url_path='remove/(?P<item_id>[^/.]+)')
     def remove_item(self, request, item_id=None):
-        """Remove item from wishlist"""
+        """Remove item from wishlist by listing ID or wishlist item ID"""
         wishlist = self.get_or_create_wishlist(request.user)
-        wishlist_item = get_object_or_404(WishlistItem, id=item_id, wishlist=wishlist)
+        wishlist_item = (
+            WishlistItem.objects.filter(wishlist=wishlist, listing_id=item_id).first()
+            or WishlistItem.objects.filter(wishlist=wishlist, id=item_id).first()
+        )
+
+        if not wishlist_item:
+            return Response(
+                {'success': False, 'error': 'Item not found in wishlist'},
+                status=status.HTTP_404_NOT_FOUND
+            )
 
         wishlist_item.delete()
-
-        return Response({
-            'message': 'Item removed from wishlist'
-        }, status=status.HTTP_204_NO_CONTENT)
+        return Response({'message': 'Item removed from wishlist'}, status=status.HTTP_204_NO_CONTENT)
 
     @action(detail=False, methods=['delete'], url_path='remove-by-listing/(?P<listing_id>[^/.]+)')
     def remove_by_listing(self, request, listing_id=None):
