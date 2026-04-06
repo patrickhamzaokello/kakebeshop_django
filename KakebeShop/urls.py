@@ -9,6 +9,12 @@ from django.db import connection
 from drf_spectacular.views import SpectacularAPIView, SpectacularSwaggerView
 
 from KakebeShop import settings
+from KakebeShop.exceptions import json_400, json_403, json_404, json_500
+
+handler400 = json_400
+handler403 = json_403
+handler404 = json_404
+handler500 = json_500
 
 schema_view = get_schema_view(
     openapi.Info(

@@ -247,7 +247,8 @@ REST_FRAMEWORK = {
     'NON_FIELD_ERRORS_KEY': 'error',
     'DEFAULT_AUTHENTICATION_CLASSES': (
         'rest_framework_simplejwt.authentication.JWTAuthentication',
-    )
+    ),
+    'EXCEPTION_HANDLER': 'KakebeShop.exceptions.custom_exception_handler',
 }
 
 SIMPLE_JWT = {
