@@ -6,6 +6,8 @@ from rest_framework.permissions import IsAuthenticated
 from django.db import transaction
 from django.shortcuts import get_object_or_404
 
+from django.db.models import Q
+
 from .models import OrderIntent, OrderIntentItem, OrderGroup
 from .serializers import (
     OrderIntentSerializer,
@@ -28,18 +30,17 @@ class OrderIntentViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         user = self.request.user
+        qs_base = OrderIntent.objects.select_related(
+            'buyer', 'merchant', 'address', 'order_group'
+        ).prefetch_related('items__listing').order_by('-created_at')
 
-        # If user is a merchant, show their orders
         if hasattr(user, 'merchant_profile'):
-            return OrderIntent.objects.filter(
-                merchant=user.merchant_profile
-            ).select_related('buyer', 'merchant', 'address', 'order_group').prefetch_related('items__listing')
+            # Return orders where user is buyer OR merchant
+            return qs_base.filter(
+                Q(buyer=user) | Q(merchant=user.merchant_profile)
+            )
 
-        # Otherwise show user's orders as buyer
-        return OrderIntent.objects.filter(
-            buyer=user
-        ).select_related('buyer', 'merchant', 'address', 'order_group').prefetch_related('items__listing').order_by(
-            '-created_at')
+        return qs_base.filter(buyer=user)
 
     @action(detail=False, methods=['post'], url_path='checkout')
     def checkout(self, request):
