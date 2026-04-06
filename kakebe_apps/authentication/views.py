@@ -3,6 +3,9 @@ from django.shortcuts import render
 from rest_framework import generics, status, views, permissions
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.exceptions import ValidationError
+from rest_framework.decorators import action
+from django.shortcuts import get_object_or_404
+
 
 from .email_templates import get_email_template
 from .serializers import (
@@ -834,6 +837,46 @@ class UserProfileView(generics.RetrieveUpdateAPIView):
                 'error': 'Failed to retrieve profile',
                 'message': 'Please try again later'
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+    @action(detail=False, methods=['post'], permission_classes=[permissions.IsAuthenticated], url_path='me/update-profile-image')
+    def update_profile_image(self, request):
+        """
+        Set Profile logo from a previously uploaded image group.
+
+        Expects a confirmed 'profile' image uploaded via the standard
+        presign → upload → confirm flow.
+
+        Body: { "image_group_id": "<uuid>" }
+        """
+        user = get_object_or_404(User, user=request.user)
+
+        serializer = UserProfileSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        image_group_id = serializer.validated_data['image_group_id']
+
+        from kakebe_apps.imagehandler.models import ImageAsset
+
+        assets = ImageAsset.objects.filter(
+            image_group_id=image_group_id,
+            owner=request.user,
+            image_type='profile',
+            is_confirmed=True
+        )
+        if not assets.exists():
+            return Response(
+                {'detail': 'No confirmed profile image found for this image_group_id.'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        # Attach assets to this merchant
+        assets.update(object_id=user.id)
+
+        # Prefer medium variant for the profile_image URL, fall back to thumb
+        asset = assets.filter(variant='medium').first() or assets.first()
+        user.profile_image = asset.cdn_url()
+        user.save(update_fields=['profile_image', 'updated_at'])
+
+        return Response(UserProfileSerializer(user, context={'request': request}).data)
 
     def update(self, request, *args, **kwargs):
         """Update user profile"""
