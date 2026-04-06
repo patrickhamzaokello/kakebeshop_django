@@ -17,9 +17,9 @@ class UserAddressViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
-        """Return addresses for the authenticated user"""
         return UserAddress.objects.filter(
-            user=self.request.user
+            user=self.request.user,
+            is_deleted=False
         ).order_by('-is_default', '-created_at')
 
     def get_serializer_class(self):
@@ -91,34 +91,32 @@ class UserAddressViewSet(viewsets.ModelViewSet):
         return Response(UserAddressSerializer(instance).data)
 
     def destroy(self, request, *args, **kwargs):
-        """Delete an address"""
         instance = self.get_object()
 
-        # Ensure user owns this address
         if instance.user != request.user:
             return Response(
                 {'error': 'You do not have permission to delete this address'},
                 status=status.HTTP_403_FORBIDDEN
             )
 
-        # Prevent deletion of default address if it's the only one
         if instance.is_default:
-            other_addresses = UserAddress.objects.filter(
-                user=request.user
-            ).exclude(id=instance.id)
+            next_address = UserAddress.objects.filter(
+                user=request.user, is_deleted=False
+            ).exclude(id=instance.id).first()
 
-            if not other_addresses.exists():
+            if not next_address:
                 return Response(
                     {'error': 'Cannot delete your only address'},
                     status=status.HTTP_400_BAD_REQUEST
                 )
 
-            # Promote the next address to default
-            next_address = other_addresses.first()
             next_address.is_default = True
             next_address.save(update_fields=['is_default'])
 
-        self.perform_destroy(instance)
+        instance.is_deleted = True
+        instance.is_default = False
+        instance.save(update_fields=['is_deleted', 'is_default'])
+
         return Response(status=status.HTTP_204_NO_CONTENT)
 
     def _do_set_default(self, request, pk=None):
