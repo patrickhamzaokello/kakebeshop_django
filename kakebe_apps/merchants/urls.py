@@ -21,10 +21,13 @@ urlpatterns = [
 # GET    /merchants/{id}/              - Retrieve merchant detail (must be verified)
 #
 # AUTHENTICATED ENDPOINTS:
-# GET    /merchants/me/                - Get own profile (works even if unverified)
-# PATCH  /merchants/me/                - Update own profile
-# POST   /merchants/create_profile/    - Create merchant profile (starts unverified)
-# DELETE /merchants/delete_me/         - Soft delete own profile
+# GET    /merchants/me/                      - Get own profile (works even if unverified)
+# PATCH  /merchants/me/                      - Update own profile
+# GET    /merchants/me/orders/               - Get merchant's orders (filter: ?status=NEW|CONTACTED|...)
+# POST   /merchants/me/update-logo/          - Set logo from uploaded profile image_group_id
+# POST   /merchants/me/update-cover-image/   - Set cover from uploaded store_banner image_group_id
+# POST   /merchants/create_profile/          - Create merchant profile (starts unverified)
+# DELETE /merchants/delete_me/               - Soft delete own profile
 #
 # Example API calls:
 # GET /merchants/?page=1&page_size=20&search=coffee&min_rating=4.0&sort_by=-rating

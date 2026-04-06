@@ -77,6 +77,22 @@ class OrderIntentViewSet(viewsets.ModelViewSet):
                     'details': validation_errors
                 }, status=status.HTTP_400_BAD_REQUEST)
 
+            price_errors = [
+                {
+                    'item_id': str(item.id),
+                    'error': f'"{item.listing.title}" has no fixed price and cannot be checked out. '
+                             f'Please remove it from your cart.'
+                }
+                for item in cart.items.select_related('listing').all()
+                if item.listing.price is None
+            ]
+            if price_errors:
+                return Response({
+                    'success': False,
+                    'error': 'Some items do not have a fixed price and cannot be checked out.',
+                    'details': price_errors
+                }, status=status.HTTP_400_BAD_REQUEST)
+
             address = get_object_or_404(
                 UserAddress,
                 id=serializer.validated_data['address_id'],

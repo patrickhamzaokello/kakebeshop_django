@@ -11,7 +11,8 @@ from .serializers import (
     MerchantListSerializer,
     MerchantDetailSerializer,
     MerchantUpdateSerializer,
-    MerchantCreateSerializer
+    MerchantCreateSerializer,
+    MerchantImageUpdateSerializer
 )
 
 
@@ -246,6 +247,123 @@ class MerchantViewSet(viewsets.ViewSet):
             MerchantDetailSerializer(merchant, context={'request': request}).data,
             status=status.HTTP_201_CREATED
         )
+
+    @action(detail=False, methods=['get'], permission_classes=[permissions.IsAuthenticated], url_path='me/orders')
+    def me_orders(self, request):
+        """
+        Get orders for the authenticated merchant's profile.
+
+        Query params:
+        - status: Filter by order status (NEW, CONTACTED, CONFIRMED, COMPLETED, CANCELLED)
+        - page / page_size: Pagination
+        """
+        merchant = get_object_or_404(Merchant, user=request.user)
+
+        from kakebe_apps.orders.models import OrderIntent
+        from kakebe_apps.orders.serializers import OrderIntentSerializer
+
+        queryset = OrderIntent.objects.filter(
+            merchant=merchant
+        ).select_related(
+            'buyer', 'merchant', 'address', 'order_group'
+        ).prefetch_related('items__listing').order_by('-created_at')
+
+        order_status = request.query_params.get('status')
+        if order_status:
+            queryset = queryset.filter(status=order_status.upper())
+
+        paginator = self.pagination_class()
+        page = paginator.paginate_queryset(queryset, request)
+        if page is not None:
+            serializer = OrderIntentSerializer(page, many=True)
+            return paginator.get_paginated_response(serializer.data)
+
+        serializer = OrderIntentSerializer(queryset, many=True)
+        return Response({
+            'success': True,
+            'count': queryset.count(),
+            'results': serializer.data
+        })
+
+    @action(detail=False, methods=['post'], permission_classes=[permissions.IsAuthenticated], url_path='me/update-logo')
+    def update_logo(self, request):
+        """
+        Set merchant logo from a previously uploaded image group.
+
+        Expects a confirmed 'profile' image uploaded via the standard
+        presign → upload → confirm flow.
+
+        Body: { "image_group_id": "<uuid>" }
+        """
+        merchant = get_object_or_404(Merchant, user=request.user)
+
+        serializer = MerchantImageUpdateSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        image_group_id = serializer.validated_data['image_group_id']
+
+        from kakebe_apps.imagehandler.models import ImageAsset
+
+        assets = ImageAsset.objects.filter(
+            image_group_id=image_group_id,
+            owner=request.user,
+            image_type='profile',
+            is_confirmed=True
+        )
+        if not assets.exists():
+            return Response(
+                {'detail': 'No confirmed profile image found for this image_group_id.'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        # Attach assets to this merchant
+        assets.update(object_id=merchant.id)
+
+        # Prefer medium variant for the logo URL, fall back to thumb
+        asset = assets.filter(variant='medium').first() or assets.first()
+        merchant.logo = asset.cdn_url()
+        merchant.save(update_fields=['logo', 'updated_at'])
+
+        return Response(MerchantDetailSerializer(merchant, context={'request': request}).data)
+
+    @action(detail=False, methods=['post'], permission_classes=[permissions.IsAuthenticated], url_path='me/update-cover-image')
+    def update_cover_image(self, request):
+        """
+        Set merchant cover image from a previously uploaded image group.
+
+        Expects a confirmed 'store_banner' image uploaded via the standard
+        presign → upload → confirm flow.
+
+        Body: { "image_group_id": "<uuid>" }
+        """
+        merchant = get_object_or_404(Merchant, user=request.user)
+
+        serializer = MerchantImageUpdateSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        image_group_id = serializer.validated_data['image_group_id']
+
+        from kakebe_apps.imagehandler.models import ImageAsset
+
+        assets = ImageAsset.objects.filter(
+            image_group_id=image_group_id,
+            owner=request.user,
+            image_type='store_banner',
+            is_confirmed=True
+        )
+        if not assets.exists():
+            return Response(
+                {'detail': 'No confirmed store_banner image found for this image_group_id.'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        # Attach assets to this merchant
+        assets.update(object_id=merchant.id)
+
+        # store_banner only has a large variant
+        asset = assets.filter(variant='large').first() or assets.first()
+        merchant.cover_image = asset.cdn_url()
+        merchant.save(update_fields=['cover_image', 'updated_at'])
+
+        return Response(MerchantDetailSerializer(merchant, context={'request': request}).data)
 
     @action(detail=False, methods=['delete'], permission_classes=[permissions.IsAuthenticated])
     def delete_me(self, request):

@@ -78,6 +78,11 @@ class MerchantUpdateSerializer(serializers.ModelSerializer):
         return value
 
 
+class MerchantImageUpdateSerializer(serializers.Serializer):
+    """Used for updating logo or cover image via an uploaded image group"""
+    image_group_id = serializers.UUIDField()
+
+
 class MerchantCreateSerializer(serializers.ModelSerializer):
     """Serializer for creating a new merchant profile"""
 
