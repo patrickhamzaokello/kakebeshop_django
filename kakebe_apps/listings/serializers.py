@@ -61,6 +61,7 @@ class ListingDetailSerializer(serializers.ModelSerializer):
     business_hours = ListingBusinessHourSerializer(many=True, read_only=True)
     is_active = serializers.BooleanField(read_only=True)
     images = serializers.SerializerMethodField()
+    share_url = serializers.SerializerMethodField()
 
     class Meta:
         model = Listing
@@ -71,7 +72,7 @@ class ListingDetailSerializer(serializers.ModelSerializer):
             'status', 'rejection_reason', 'is_verified', 'verified_at',
             'is_featured', 'featured_until', 'views_count', 'contact_count',
             'metadata', 'expires_at', 'created_at', 'updated_at',
-            'business_hours', 'is_active', 'images'
+            'business_hours', 'is_active', 'images', 'share_url'
         ]
         read_only_fields = [
             'id', 'merchant', 'is_verified', 'verified_at',
@@ -81,6 +82,9 @@ class ListingDetailSerializer(serializers.ModelSerializer):
 
     def get_images(self, obj):
         return obj.images
+
+    def get_share_url(self, obj):
+        return f"https://kakebeshop.com/listing/{obj.id}"
 
 
 class ListingCreateSerializer(serializers.ModelSerializer):
