@@ -1,7 +1,13 @@
 {
   "permissions": {
     "allow": [
-      "Bash(python:*)"
+      "Bash(python:*)",
+      "Bash(grep -v \"^$\")",
+      "Read(//home/pk/**)",
+      "Bash(curl -s -X POST http://localhost:4000/api/push-notification -H 'Content-Type: application/json' -d '{\"messages\": [{\"token\": \"ExponentPushToken[C_aALfBK3ZJIy2noTSO2fX]\", \"title\": \"Test Notification\", \"body\": \"This is a test from KakebeShop backend\", \"metadata\": {\"test\": true}}]}')",
+      "Bash(python3 -m json.tool)",
+      "Bash(docker exec kakebe_backend_container:*)",
+      "Bash(python3:*)"
     ]
   }
 }
