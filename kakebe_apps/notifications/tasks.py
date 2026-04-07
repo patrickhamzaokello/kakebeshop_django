@@ -79,25 +79,25 @@ def send_email_notification(self, delivery_id: str):
         delivery = NotificationDelivery.objects.get(id=delivery_id)
         notification = delivery.notification
 
-        # Send email
-        success = EmailNotificationService.send_notification_email(
+        # Send email — returns None on success, error string on failure
+        error = EmailNotificationService.send_notification_email(
             notification=notification,
             recipient_email=delivery.recipient,
         )
 
-        if success:
+        if error is None:
             delivery.status = NotificationStatus.SENT
             delivery.sent_at = timezone.now()
             logger.info(f"Email sent successfully: {delivery_id}")
         else:
             delivery.status = NotificationStatus.FAILED
-            delivery.error_message = "Failed to send email"
+            delivery.error_message = error
             delivery.retry_count += 1
 
             if delivery.can_retry():
                 delivery.next_retry_at = timezone.now() + timedelta(minutes=5)
 
-            logger.error(f"Failed to send email: {delivery_id}")
+            logger.error(f"Failed to send email {delivery_id}: {error}")
 
         delivery.save()
         return f"Email delivery {delivery_id} processed"

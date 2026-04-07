@@ -30,25 +30,19 @@ class EmailNotificationService:
             cls,
             notification: Notification,
             recipient_email: str,
-    ) -> bool:
+    ) -> str | None:
         """
-        Send notification email
-
-        Args:
-            notification: Notification instance
-            recipient_email: Recipient email address
+        Send notification email.
 
         Returns:
-            True if email sent successfully, False otherwise
+            None on success, or an error string describing the failure.
         """
         try:
-            # Get template
             template_name = cls.TEMPLATE_MAP.get(
                 notification.notification_type,
                 'emails/generic_notification.html'
             )
 
-            # Prepare context
             context = {
                 'notification': notification,
                 'user': notification.user,
@@ -60,39 +54,28 @@ class EmailNotificationService:
                 'current_year': notification.created_at.year,
             }
 
-            # Render HTML email
             html_content = render_to_string(template_name, context)
-
-            # Create plain text version
             text_content = strip_tags(html_content)
 
-            # Create email
-            subject = notification.title
-            from_email = settings.DEFAULT_FROM_EMAIL
-            to_email = [recipient_email]
-
             email = EmailMultiAlternatives(
-                subject=subject,
+                subject=notification.title,
                 body=text_content,
-                from_email=from_email,
-                to=to_email,
+                from_email=settings.DEFAULT_FROM_EMAIL,
+                to=[recipient_email],
             )
-
-            # Attach HTML content
             email.attach_alternative(html_content, "text/html")
-
-            # Send email
             email.send(fail_silently=False)
 
             logger.info(f"Email sent to {recipient_email} for notification {notification.id}")
-            return True
+            return None
 
         except Exception as e:
+            error = str(e)
             logger.error(
-                f"Error sending email to {recipient_email} for notification {notification.id}: {str(e)}",
-                exc_info=True
+                f"Error sending email to {recipient_email} for notification {notification.id}: {error}",
+                exc_info=True,
             )
-            return False
+            return error
 
     @classmethod
     def send_test_email(cls, recipient_email: str) -> bool:

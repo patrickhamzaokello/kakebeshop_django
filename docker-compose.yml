@@ -40,7 +40,7 @@ services:
       # Update to use shared postgres container
       - DATABASE_URL=postgresql://${POSTGRES_USER:-kakebe_user}:${POSTGRES_PASSWORD}@shared_postgres:5432/${KAKEBE_DB_NAME:-kakebe_db}
       # Update to use shared redis container
-      - REDIS_URL=redis://:${REDIS_PASSWORD}@shared_redis:6379/1
+      - REDIS_DATABASE_SERVER_HOST=redis://:${REDIS_PASSWORD}@shared_redis:6379/1
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "python", "manage.py", "check", "--database", "default"]
@@ -65,7 +65,7 @@ services:
   celery:
     image: kakebe_backend_image
     container_name: kakebe_celery_container
-    command: celery -A KakebeShop worker -E -l info
+    command: celery -A KakebeShop worker -Q kakebeshop_tasks -E -l info
     restart: unless-stopped
     volumes:
       - static_files:/app/staticfiles
@@ -79,7 +79,7 @@ services:
     environment:
       # Update to use shared postgres and redis containers
       - DATABASE_URL=postgresql://${POSTGRES_USER:-kakebe_user}:${POSTGRES_PASSWORD}@shared_postgres:5432/${KAKEBE_DB_NAME:-kakebe_db}
-      - REDIS_URL=redis://:${REDIS_PASSWORD}@shared_redis:6379/1
+      - REDIS_DATABASE_SERVER_HOST=redis://:${REDIS_PASSWORD}@shared_redis:6379/1
     deploy:
       resources:
         limits:
@@ -111,7 +111,7 @@ services:
     environment:
       # Update to use shared postgres and redis containers
       - DATABASE_URL=postgresql://${POSTGRES_USER:-kakebe_user}:${POSTGRES_PASSWORD}@shared_postgres:5432/${KAKEBE_DB_NAME:-kakebe_db}
-      - REDIS_URL=redis://:${REDIS_PASSWORD}@shared_redis:6379/1
+      - REDIS_DATABASE_SERVER_HOST=redis://:${REDIS_PASSWORD}@shared_redis:6379/1
     deploy:
       resources:
         limits:
