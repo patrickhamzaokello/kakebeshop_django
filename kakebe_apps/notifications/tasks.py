@@ -1,7 +1,7 @@
 # kakebe_apps/notifications/tasks.py
 from celery import shared_task
 from django.conf import settings
-from django.db import models
+from django.db import models, transaction
 from django.utils import timezone
 from datetime import timedelta
 import logging
@@ -77,6 +77,10 @@ def send_email_notification(self, delivery_id: str):
     """
     try:
         delivery = NotificationDelivery.objects.get(id=delivery_id)
+
+        if delivery.status != NotificationStatus.PENDING:
+            return f"Delivery {delivery_id} already processed (status: {delivery.status})"
+
         notification = delivery.notification
 
         # Send email — returns None on success, error string on failure
@@ -124,6 +128,10 @@ def send_push_notification(self, delivery_id: str):
     """
     try:
         delivery = NotificationDelivery.objects.get(id=delivery_id)
+
+        if delivery.status != NotificationStatus.PENDING:
+            return f"Delivery {delivery_id} already processed (status: {delivery.status})"
+
         notification = delivery.notification
 
         # Get device tokens, filtering out any blank entries
@@ -174,19 +182,28 @@ def process_pending_notifications():
     This ensures near real-time delivery
     """
     try:
-        # Get all pending deliveries
-        pending_deliveries = NotificationDelivery.objects.filter(
-            status=NotificationStatus.PENDING
-        ).select_related('notification')[:100]  # Process in batches
-
         count = 0
-        for delivery in pending_deliveries:
+        with transaction.atomic():
+            # Use skip_locked so concurrent workers don't schedule the same deliveries
+            pending_deliveries = list(
+                NotificationDelivery.objects.select_for_update(skip_locked=True).filter(
+                    status=NotificationStatus.PENDING
+                ).select_related('notification')[:100]
+            )
+
+            delivery_ids_to_schedule = []
+            for delivery in pending_deliveries:
+                if delivery.channel in (NotificationChannel.EMAIL, NotificationChannel.PUSH):
+                    delivery_ids_to_schedule.append(delivery)
+                    count += 1
+
+        # Schedule outside the transaction so the lock is released first
+        for delivery in delivery_ids_to_schedule:
             try:
                 if delivery.channel == NotificationChannel.EMAIL:
                     send_email_notification.delay(str(delivery.id))
                 elif delivery.channel == NotificationChannel.PUSH:
                     send_push_notification.delay(str(delivery.id))
-                count += 1
             except Exception as e:
                 logger.error(
                     f"Error processing delivery {delivery.id}: {str(e)}",
@@ -208,21 +225,23 @@ def retry_failed_notifications():
     Runs every 5 minutes
     """
     try:
-        # Get failed deliveries that can be retried
-        failed_deliveries = NotificationDelivery.objects.filter(
-            status=NotificationStatus.FAILED,
-            retry_count__lt=models.F('max_retries'),
-            next_retry_at__lte=timezone.now()
-        ).select_related('notification')[:50]
-
         count = 0
+        with transaction.atomic():
+            failed_deliveries = list(
+                NotificationDelivery.objects.select_for_update(skip_locked=True).filter(
+                    status=NotificationStatus.FAILED,
+                    retry_count__lt=models.F('max_retries'),
+                    next_retry_at__lte=timezone.now()
+                ).select_related('notification')[:50]
+            )
+
+            # Reset to PENDING inside the transaction so process_pending picks them up
+            for delivery in failed_deliveries:
+                delivery.status = NotificationStatus.PENDING
+                delivery.save(update_fields=['status'])
+
         for delivery in failed_deliveries:
             try:
-                # Reset status to pending
-                delivery.status = NotificationStatus.PENDING
-                delivery.save()
-
-                # Schedule for delivery
                 if delivery.channel == NotificationChannel.EMAIL:
                     send_email_notification.delay(str(delivery.id))
                 elif delivery.channel == NotificationChannel.PUSH:
