@@ -10,6 +10,21 @@ logger = logging.getLogger(__name__)
 
 BATCH_SIZE = 100
 
+# Maps Django NotificationType values → notification service e-commerce types
+_NOTIFICATION_TYPE_MAP = {
+    'ORDER_CREATED':          'order_update',
+    'ORDER_CONTACTED':        'order_update',
+    'ORDER_CONFIRMED':        'order_update',
+    'ORDER_COMPLETED':        'order_update',
+    'ORDER_CANCELLED':        'order_update',
+    'MERCHANT_NEW_ORDER':     'new_order',
+    'MERCHANT_APPROVED':      'order_update',
+    'MERCHANT_DEACTIVATED':   'order_update',
+    'MERCHANT_SUSPENDED':     'order_update',
+    'LISTING_APPROVED':       'new_listing',
+    'LISTING_REJECTED':       'new_listing',
+}
+
 
 class PushNotificationService:
     """Service for sending push notifications via external API"""
@@ -26,7 +41,9 @@ class PushNotificationService:
         """Build per-token message list expected by the push service."""
         metadata = {
             'notificationId': str(notification.id),
-            'notificationType': notification.notification_type,
+            'notificationType': _NOTIFICATION_TYPE_MAP.get(
+                notification.notification_type, 'order_update'
+            ),
             'orderId': str(notification.order_id) if notification.order_id else None,
             'merchantId': str(notification.merchant_id) if notification.merchant_id else None,
             **notification.metadata,
