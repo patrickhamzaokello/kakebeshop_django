@@ -302,6 +302,8 @@ EMAIL_HOST_USER = config('EMAIL_HOST_USER')
 EMAIL_HOST_PASSWORD = config('EMAIL_HOST_PASSWORD')
 EMAIL_PLUNK_API_KEY = config('EMAIL_PLUNK_API_KEY')
 
+EMAIL_TIMEOUT = 10  # seconds — prevents SMTP connections from hanging Celery workers
+
 EMAIL_SENDER_NAME = 'Kakebeshop'
 EMAIL_REPLY_TO = 'support@kakebeshop.com'
 
