@@ -10,7 +10,7 @@ from .models import (
     NotificationStatus,
     UserNotificationPreference,
 )
-from .tasks import send_notification_task
+from .tasks import send_email_notification, send_push_notification
 from kakebe_apps.engagement.models import PushToken
 
 User = get_user_model()
@@ -82,7 +82,7 @@ class NotificationService:
                 channels.append(NotificationChannel.PUSH)
             channels.append(NotificationChannel.IN_APP)  # Always create in-app
 
-        # Create delivery records
+        # Create delivery records and dispatch a dedicated task per channel
         for channel in channels:
             if channel == NotificationChannel.EMAIL:
                 recipient = user.email
@@ -91,16 +91,22 @@ class NotificationService:
             else:
                 recipient = str(user.id)
 
-            NotificationDelivery.objects.create(
+            delivery = NotificationDelivery.objects.create(
                 notification=notification,
                 channel=channel,
                 recipient=recipient,
                 status=NotificationStatus.PENDING,
             )
 
-        # Send immediately if requested
-        if send_immediately:
-            send_notification_task.delay(str(notification.id))
+            if send_immediately:
+                if channel == NotificationChannel.EMAIL:
+                    send_email_notification.delay(str(delivery.id))
+                elif channel == NotificationChannel.PUSH:
+                    send_push_notification.delay(str(delivery.id))
+                elif channel == NotificationChannel.IN_APP:
+                    delivery.status = NotificationStatus.SENT
+                    delivery.sent_at = timezone.now()
+                    delivery.save(update_fields=['status', 'sent_at'])
 
         return notification
 
