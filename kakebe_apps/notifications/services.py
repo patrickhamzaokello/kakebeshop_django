@@ -1,6 +1,7 @@
 # kakebe_apps/notifications/services.py
 from typing import List, Optional, Dict, Any
 from django.contrib.auth import get_user_model
+from django.db import transaction
 from django.utils import timezone
 from .models import (
     Notification,
@@ -100,9 +101,15 @@ class NotificationService:
 
             if send_immediately:
                 if channel == NotificationChannel.EMAIL:
-                    send_email_notification.delay(str(delivery.id))
+                    delivery_id = str(delivery.id)
+                    transaction.on_commit(
+                        lambda did=delivery_id: send_email_notification.delay(did)
+                    )
                 elif channel == NotificationChannel.PUSH:
-                    send_push_notification.delay(str(delivery.id))
+                    delivery_id = str(delivery.id)
+                    transaction.on_commit(
+                        lambda did=delivery_id: send_push_notification.delay(did)
+                    )
                 elif channel == NotificationChannel.IN_APP:
                     delivery.status = NotificationStatus.SENT
                     delivery.sent_at = timezone.now()

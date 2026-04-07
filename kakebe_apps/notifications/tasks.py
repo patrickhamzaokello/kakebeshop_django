@@ -126,8 +126,8 @@ def send_push_notification(self, delivery_id: str):
         delivery = NotificationDelivery.objects.get(id=delivery_id)
         notification = delivery.notification
 
-        # Get device tokens
-        device_tokens = delivery.recipient.split(',')
+        # Get device tokens, filtering out any blank entries
+        device_tokens = [t for t in delivery.recipient.split(',') if t.strip()]
 
         # Send push notification
         result = PushNotificationService.send_push_notification(
