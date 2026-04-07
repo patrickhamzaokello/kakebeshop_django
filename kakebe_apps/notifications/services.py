@@ -11,6 +11,7 @@ from .models import (
     UserNotificationPreference,
 )
 from .tasks import send_notification_task
+from kakebe_apps.engagement.models import PushToken
 
 User = get_user_model()
 
@@ -66,12 +67,18 @@ class NotificationService:
             user=user
         )
 
+        # Resolve push tokens: prefer the PushToken model, fall back to the JSON field
+        push_token_values = list(
+            PushToken.objects.filter(user=user, is_active=True)
+            .values_list('token', flat=True)
+        ) or preferences.device_tokens
+
         # Determine channels to use
         if channels is None:
             channels = []
             if preferences.email_enabled:
                 channels.append(NotificationChannel.EMAIL)
-            if preferences.push_enabled and preferences.device_tokens:
+            if preferences.push_enabled and push_token_values:
                 channels.append(NotificationChannel.PUSH)
             channels.append(NotificationChannel.IN_APP)  # Always create in-app
 
@@ -80,7 +87,7 @@ class NotificationService:
             if channel == NotificationChannel.EMAIL:
                 recipient = user.email
             elif channel == NotificationChannel.PUSH:
-                recipient = ','.join(preferences.device_tokens)
+                recipient = ','.join(push_token_values)
             else:
                 recipient = str(user.id)
 

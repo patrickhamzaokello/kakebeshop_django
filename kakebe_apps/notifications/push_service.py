@@ -8,13 +8,54 @@ from .models import Notification
 
 logger = logging.getLogger(__name__)
 
+BATCH_SIZE = 100
+
 
 class PushNotificationService:
     """Service for sending push notifications via external API"""
 
-    # External push notification API endpoint
-    PUSH_API_URL = getattr(settings, 'PUSH_NOTIFICATION_API_URL', '')
+    PUSH_API_URL = getattr(
+        settings,
+        'PUSH_NOTIFICATION_API_URL',
+        'http://notification-service:4000/api/push-notification',
+    )
     PUSH_API_KEY = getattr(settings, 'PUSH_NOTIFICATION_API_KEY', '')
+
+    @classmethod
+    def _build_messages(cls, notification: Notification, device_tokens: List[str]) -> List[Dict]:
+        """Build per-token message list expected by the push service."""
+        metadata = {
+            'notificationId': str(notification.id),
+            'notificationType': notification.notification_type,
+            'orderId': str(notification.order_id) if notification.order_id else None,
+            'merchantId': str(notification.merchant_id) if notification.merchant_id else None,
+            **notification.metadata,
+        }
+        return [
+            {
+                'token': token,
+                'title': notification.title,
+                'body': notification.message,
+                'metadata': metadata,
+            }
+            for token in device_tokens
+        ]
+
+    @classmethod
+    def _send_batch(cls, messages: List[Dict]) -> bool:
+        """POST a single batch of messages to the push service. Returns True on success."""
+        headers = {
+            'Content-Type': 'application/json',
+            'Authorization': f'Bearer {cls.PUSH_API_KEY}',
+        }
+        response = requests.post(
+            cls.PUSH_API_URL,
+            json={'messages': messages},
+            headers=headers,
+            timeout=10,
+        )
+        response.raise_for_status()
+        return True
 
     @classmethod
     def send_push_notification(
@@ -23,67 +64,35 @@ class PushNotificationService:
             device_tokens: List[str],
     ) -> Dict[str, Any]:
         """
-        Send push notification to devices
+        Send push notification to one or more devices.
 
-        Args:
-            notification: Notification instance
-            device_tokens: List of device tokens
-
-        Returns:
-            Dictionary with success status and details
+        Builds per-token messages and posts them in batches to the push service
+        endpoint as ``{"messages": [...]}``.
         """
+        if not device_tokens:
+            return {'success': False, 'error': 'No device tokens provided', 'sent_count': 0, 'failed_count': 0}
+
+        messages = cls._build_messages(notification, device_tokens)
+
         try:
-            # Prepare payload for external API
-            payload = {
-                'tokens': device_tokens,
-                'notification': {
-                    'title': notification.title,
-                    'body': notification.message,
-                },
-                'data': {
-                    'notification_id': str(notification.id),
-                    'notification_type': notification.notification_type,
-                    'order_id': str(notification.order_id) if notification.order_id else None,
-                    'merchant_id': str(notification.merchant_id) if notification.merchant_id else None,
-                    **notification.metadata,
-                },
-                'priority': 'high',
-                'ttl': 86400,  # 24 hours
-            }
-
-            # Send request to external API
-            headers = {
-                'Content-Type': 'application/json',
-                'Authorization': f'Bearer {cls.PUSH_API_KEY}',
-            }
-
-            response = requests.post(
-                cls.PUSH_API_URL,
-                json=payload,
-                headers=headers,
-                timeout=10,
-            )
-
-            response.raise_for_status()
-            result = response.json()
+            success_count = 0
+            for i in range(0, len(messages), BATCH_SIZE):
+                cls._send_batch(messages[i:i + BATCH_SIZE])
+                success_count += len(messages[i:i + BATCH_SIZE])
 
             logger.info(
-                f"Push notification sent successfully: {notification.id}, "
-                f"Tokens: {len(device_tokens)}"
+                f"Push notification sent: {notification.id}, tokens: {success_count}"
             )
-
             return {
                 'success': True,
-                'message_id': result.get('message_id'),
-                'sent_count': result.get('sent_count', len(device_tokens)),
-                'failed_count': result.get('failed_count', 0),
-                'response': result,
+                'sent_count': success_count,
+                'failed_count': 0,
             }
 
         except requests.exceptions.RequestException as e:
             logger.error(
                 f"Error sending push notification {notification.id}: {str(e)}",
-                exc_info=True
+                exc_info=True,
             )
             return {
                 'success': False,
@@ -95,7 +104,7 @@ class PushNotificationService:
         except Exception as e:
             logger.error(
                 f"Unexpected error sending push notification {notification.id}: {str(e)}",
-                exc_info=True
+                exc_info=True,
             )
             return {
                 'success': False,
@@ -110,45 +119,22 @@ class PushNotificationService:
             notifications_data: List[Dict[str, Any]],
     ) -> Dict[str, Any]:
         """
-        Send multiple push notifications in bulk
+        Send pre-built message dicts in bulk.
 
-        Args:
-            notifications_data: List of notification data
-                Each item should have: tokens, title, body, data
-
-        Returns:
-            Dictionary with success status and counts
+        Each item in ``notifications_data`` must already be a message dict with
+        ``token``, ``title``, ``body``, and ``metadata`` keys.
         """
         try:
-            # Prepare bulk payload
-            payload = {
-                'notifications': notifications_data,
-                'priority': 'high',
-            }
+            success_count = 0
+            for i in range(0, len(notifications_data), BATCH_SIZE):
+                cls._send_batch(notifications_data[i:i + BATCH_SIZE])
+                success_count += len(notifications_data[i:i + BATCH_SIZE])
 
-            headers = {
-                'Content-Type': 'application/json',
-                'Authorization': f'Bearer {cls.PUSH_API_KEY}',
-            }
-
-            # Send bulk request
-            response = requests.post(
-                f"{cls.PUSH_API_URL}/bulk",
-                json=payload,
-                headers=headers,
-                timeout=30,
-            )
-
-            response.raise_for_status()
-            result = response.json()
-
-            logger.info(f"Bulk push notifications sent: {len(notifications_data)}")
-
+            logger.info(f"Bulk push notifications sent: {success_count}")
             return {
                 'success': True,
-                'total_sent': result.get('total_sent', 0),
-                'total_failed': result.get('total_failed', 0),
-                'response': result,
+                'total_sent': success_count,
+                'total_failed': 0,
             }
 
         except Exception as e:

@@ -6,29 +6,24 @@ from kakebe_apps.merchants.models import Merchant
 from .services import NotificationService
 from .models import NotificationType
 
-# Store previous state for comparison
-_order_previous_state = {}
-_merchant_previous_state = {}
-
 
 @receiver(pre_save, sender=OrderIntent)
 def store_order_previous_state(sender, instance, **kwargs):
-    """Store the previous state of the order before save"""
+    """Attach previous status to the instance so post_save can compare."""
     if instance.pk:
         try:
-            previous = OrderIntent.objects.get(pk=instance.pk)
-            _order_previous_state[instance.pk] = {
-                'status': previous.status,
-            }
+            instance._previous_status = OrderIntent.objects.values_list(
+                'status', flat=True
+            ).get(pk=instance.pk)
         except OrderIntent.DoesNotExist:
-            pass
+            instance._previous_status = None
+    else:
+        instance._previous_status = None
 
 
 @receiver(post_save, sender=OrderIntent)
 def handle_order_created_or_updated(sender, instance, created, **kwargs):
-    """
-    Send notifications when order is created or updated
-    """
+    """Send notifications when an order is created or its status changes."""
     if created:
         # Notify buyer about order creation
         NotificationService.create_order_notification(
@@ -39,28 +34,21 @@ def handle_order_created_or_updated(sender, instance, created, **kwargs):
 
         # Notify merchant about new order
         if hasattr(instance, 'merchant') and instance.merchant:
-            merchant_user = instance.merchant.user
             NotificationService.create_merchant_order_notification(
-                merchant_user=merchant_user,
+                merchant_user=instance.merchant.user,
                 order=instance,
             )
     else:
-        # Check if status changed
-        previous_state = _order_previous_state.get(instance.pk, {})
-        old_status = previous_state.get('status')
+        old_status = getattr(instance, '_previous_status', None)
 
         if old_status and old_status != instance.status:
-            # Status changed - send notification
-            notification_type = None
-
-            if instance.status == 'CONTACTED':
-                notification_type = NotificationType.ORDER_CONTACTED
-            elif instance.status == 'CONFIRMED':
-                notification_type = NotificationType.ORDER_CONFIRMED
-            elif instance.status == 'COMPLETED':
-                notification_type = NotificationType.ORDER_COMPLETED
-            elif instance.status == 'CANCELLED':
-                notification_type = NotificationType.ORDER_CANCELLED
+            status_to_type = {
+                'CONTACTED': NotificationType.ORDER_CONTACTED,
+                'CONFIRMED': NotificationType.ORDER_CONFIRMED,
+                'COMPLETED': NotificationType.ORDER_COMPLETED,
+                'CANCELLED': NotificationType.ORDER_CANCELLED,
+            }
+            notification_type = status_to_type.get(instance.status)
 
             if notification_type:
                 NotificationService.create_order_notification(
@@ -69,57 +57,45 @@ def handle_order_created_or_updated(sender, instance, created, **kwargs):
                     notification_type=notification_type,
                 )
 
-        # Clean up stored state
-        if instance.pk in _order_previous_state:
-            del _order_previous_state[instance.pk]
-
 
 @receiver(pre_save, sender=Merchant)
 def store_merchant_previous_state(sender, instance, **kwargs):
-    """Store the previous state of the merchant before save"""
+    """Attach previous status/verified to the instance so post_save can compare."""
     if instance.pk:
         try:
-            previous = Merchant.objects.get(pk=instance.pk)
-            _merchant_previous_state[instance.pk] = {
-                'status': previous.status,
-                'verified': previous.verified,
-            }
+            prev = Merchant.objects.values('status', 'verified').get(pk=instance.pk)
+            instance._previous_status = prev['status']
+            instance._previous_verified = prev['verified']
         except Merchant.DoesNotExist:
-            pass
+            instance._previous_status = None
+            instance._previous_verified = None
+    else:
+        instance._previous_status = None
+        instance._previous_verified = None
 
 
 @receiver(post_save, sender=Merchant)
 def handle_merchant_status_change(sender, instance, created, **kwargs):
-    """
-    Send notifications when merchant account status changes
-    """
-    if not created:
-        previous_state = _merchant_previous_state.get(instance.pk, {})
-        old_status = previous_state.get('status')
-        old_verified = previous_state.get('verified')
+    """Send notifications when a merchant account status changes."""
+    if created:
+        return
 
-        notification_type = None
+    old_status = getattr(instance, '_previous_status', None)
+    old_verified = getattr(instance, '_previous_verified', None)
 
-        # Check for approval (status becomes ACTIVE and verified becomes True)
-        if (instance.status == 'ACTIVE' and instance.verified and
-                (old_status != 'ACTIVE' or not old_verified)):
-            notification_type = NotificationType.MERCHANT_APPROVED
+    notification_type = None
 
-        # Check for deactivation
-        elif instance.status == 'INACTIVE' and old_status != 'INACTIVE':
-            notification_type = NotificationType.MERCHANT_DEACTIVATED
+    if (instance.status == 'ACTIVE' and instance.verified and
+            (old_status != 'ACTIVE' or not old_verified)):
+        notification_type = NotificationType.MERCHANT_APPROVED
+    elif instance.status == 'INACTIVE' and old_status != 'INACTIVE':
+        notification_type = NotificationType.MERCHANT_DEACTIVATED
+    elif instance.status == 'SUSPENDED' and old_status != 'SUSPENDED':
+        notification_type = NotificationType.MERCHANT_SUSPENDED
 
-        # Check for suspension
-        elif instance.status == 'SUSPENDED' and old_status != 'SUSPENDED':
-            notification_type = NotificationType.MERCHANT_SUSPENDED
-
-        if notification_type:
-            NotificationService.create_merchant_status_notification(
-                merchant_user=instance.user,
-                merchant=instance,
-                notification_type=notification_type,
-            )
-
-        # Clean up stored state
-        if instance.pk in _merchant_previous_state:
-            del _merchant_previous_state[instance.pk]
+    if notification_type:
+        NotificationService.create_merchant_status_notification(
+            merchant_user=instance.user,
+            merchant=instance,
+            notification_type=notification_type,
+        )
