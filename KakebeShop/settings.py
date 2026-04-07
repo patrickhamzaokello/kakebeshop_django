@@ -31,6 +31,7 @@ AWS_CLOUDFRONT_DOMAIN = config('AWS_CLOUDFRONT_DOMAIN')
 
 ALLOWED_HOSTS = [
     'backend.kakebeshop.com',
+    'kakebeshop-backend-dashboard.vercel.app',
     'localhost',
     '127.0.0.1',
     '192.168.1.3'
@@ -208,6 +209,7 @@ DATA_UPLOAD_MAX_MEMORY_SIZE = FILE_UPLOAD_MAX_MEMORY_SIZE
 CORS_ORIGIN_WHITELIST = [
     "http://localhost:8000",
     "https://newsapi.mwonya.com",
+    "https://kakebeshop-backend-dashboard.vercel.app",
     "http://127.0.0.1:8080"
 ]
 
