@@ -9,7 +9,8 @@
       "Bash(docker exec kakebe_backend_container:*)",
       "Bash(python3:*)",
       "Bash(docker exec:*)",
-      "Bash(docker restart kakebe_celery_container:*)"
+      "Bash(docker restart kakebe_celery_container:*)",
+      "Bash(pip3 show:*)"
     ]
   }
 }
