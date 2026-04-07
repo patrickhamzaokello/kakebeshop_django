@@ -13,11 +13,18 @@ class OrderIntentItemSerializer(serializers.ModelSerializer):
 
 
 
+class BuyerSerializer(serializers.Serializer):
+    name = serializers.CharField(source='buyer.name')
+    phone = serializers.CharField(source='buyer.phone')
+    email = serializers.EmailField(source='buyer.email')
+
+
 class OrderIntentSerializer(serializers.ModelSerializer):
     items = OrderIntentItemSerializer(many=True, read_only=True)
     address = UserAddressSerializer(read_only=True)
     buyer_name = serializers.CharField(source='buyer.name', read_only=True)
     merchant_name = serializers.CharField(source='merchant.display_name', read_only=True)
+    buyer = BuyerSerializer(source='*', read_only=True)
 
     # Add group info
     order_group_number = serializers.CharField(
@@ -36,7 +43,7 @@ class OrderIntentSerializer(serializers.ModelSerializer):
             'created_at', 'updated_at', 'items',
             'order_group', 'order_group_number', 'is_grouped'  # Group fields
         ]
-        read_only_fields = ['id', 'order_number', 'buyer', 'created_at', 'updated_at']
+        read_only_fields = ['id', 'order_number', 'created_at', 'updated_at']
 
     def get_is_grouped(self, obj):
         """Check if this order is part of a group"""
