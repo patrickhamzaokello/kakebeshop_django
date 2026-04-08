@@ -12,6 +12,7 @@ from .serializers import (
     CategoryTreeSerializer,
     CategoryCreateSerializer,
     CategoryUpdateSerializer,
+    CategoryWithSubcategoriesSerializer,
     TagSerializer,
     TagCreateSerializer,
 )
@@ -286,6 +287,129 @@ class CategoryViewSet(viewsets.ModelViewSet):
             'children_count': category.children.filter(is_active=True).count(),
             'created_at': category.created_at,
             'updated_at': category.updated_at
+        })
+
+    @action(detail=False, methods=['get'], url_path='with-subcategories')
+    def with_subcategories(self, request):
+        """
+        Paginated list of active parent categories, each including their subcategories.
+        Each subcategory's image_url is sourced from its most trending listing
+        (highest views_count + contact_count) — loaded in bulk (no N+1 queries).
+
+        GET /api/v1/categories/categories/with-subcategories/
+        Query params:
+          page  - page number (default: 1)
+          limit - items per page (default: 10, max: 50)
+
+        Response format matches the frontend getMainCategoriesandSubcategories() contract:
+        {
+          "results": [{ "id", "name", "subcategories": [{ "id", "name", "image_url" }] }],
+          "hasMore": bool,
+          "count": int,
+          "next": "page=N" | null,
+          "previous": "page=N" | null
+        }
+        """
+        from django.db.models import OuterRef, Subquery, F
+        from kakebe_apps.listings.models import Listing
+        from kakebe_apps.imagehandler.models import ImageAsset
+
+        try:
+            page = max(1, int(request.query_params.get('page', 1)))
+        except (ValueError, TypeError):
+            page = 1
+
+        try:
+            limit = min(50, max(1, int(request.query_params.get('limit', 10))))
+        except (ValueError, TypeError):
+            limit = 10
+
+        queryset = Category.objects.filter(
+            is_active=True,
+            parent=None,
+        ).prefetch_related('children').order_by('sort_order', 'name')
+
+        total_count = queryset.count()
+        start = (page - 1) * limit
+        end = start + limit
+        page_qs = list(queryset[start:end])
+
+        has_next = end < total_count
+        has_previous = page > 1
+
+        # ── Step 1: collect all active subcategory IDs in this page ──────────
+        parent_ids = [c.id for c in page_qs]
+        all_subcategory_ids = list(
+            Category.objects.filter(parent_id__in=parent_ids, is_active=True)
+            .values_list('id', flat=True)
+        )
+
+        # ── Step 2: find the most trending listing per subcategory ────────────
+        # "Trending" = highest combined (views_count + contact_count)
+        trending_listing_subquery = Listing.objects.filter(
+            category=OuterRef('pk'),
+            status='ACTIVE',
+            is_verified=True,
+            deleted_at__isnull=True,
+        ).order_by(
+            (F('views_count') + F('contact_count')).desc()
+        ).values('id')[:1]
+
+        subcats_annotated = Category.objects.filter(
+            id__in=all_subcategory_ids
+        ).annotate(top_listing_id=Subquery(trending_listing_subquery))
+
+        subcat_to_listing = {
+            str(sc.id): sc.top_listing_id
+            for sc in subcats_annotated
+            if sc.top_listing_id
+        }
+        listing_ids = list(subcat_to_listing.values())
+
+        # ── Step 3: bulk-fetch one image per listing (prefer thumb > medium > large) ──
+        VARIANT_PRIORITY = {'thumb': 0, 'medium': 1, 'large': 2}
+        listing_image_map = {}
+
+        if listing_ids:
+            assets = (
+                ImageAsset.objects.filter(
+                    image_type='listing',
+                    object_id__in=listing_ids,
+                    is_confirmed=True,
+                    variant__in=['thumb', 'medium', 'large'],
+                )
+                .order_by('object_id', 'order', 'created_at')
+                .values('object_id', 'variant', 's3_key')
+            )
+
+            for asset in assets:
+                lid = str(asset['object_id'])
+                existing = listing_image_map.get(lid)
+                if existing is None or (
+                    VARIANT_PRIORITY[asset['variant']] < VARIANT_PRIORITY[existing['variant']]
+                ):
+                    listing_image_map[lid] = asset
+
+        # ── Step 4: build subcategory_id → image_url map ─────────────────────
+        cdn = getattr(settings, 'AWS_CLOUDFRONT_DOMAIN', '')
+        subcategory_image_map = {}
+        for subcat_id, listing_id in subcat_to_listing.items():
+            asset = listing_image_map.get(str(listing_id))
+            subcategory_image_map[subcat_id] = (
+                f"{cdn}/{asset['s3_key']}" if asset else None
+            )
+
+        serializer = CategoryWithSubcategoriesSerializer(
+            page_qs,
+            many=True,
+            context={'subcategory_image_map': subcategory_image_map},
+        )
+        return Response({
+            'results': serializer.data,
+            'hasMore': has_next,
+            'count': total_count,
+            'next': f'page={page + 1}' if has_next else None,
+            'previous': f'page={page - 1}' if has_previous else None,
         })
 
     @action(detail=False, methods=['get'])

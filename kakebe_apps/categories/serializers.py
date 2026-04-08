@@ -2,6 +2,40 @@ from rest_framework import serializers
 from .models import Category, Tag
 
 
+class SubcategorySerializer(serializers.ModelSerializer):
+    """
+    Minimal serializer for a subcategory entry in the with-subcategories endpoint.
+    image_url is sourced from the subcategory's most trending listing image,
+    pre-loaded by the view and passed in via context['subcategory_image_map'].
+    """
+    image_url = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Category
+        fields = ['id', 'name', 'image_url']
+
+    def get_image_url(self, obj):
+        image_map = self.context.get('subcategory_image_map', {})
+        return image_map.get(str(obj.id))
+
+
+class CategoryWithSubcategoriesSerializer(serializers.ModelSerializer):
+    """
+    Serializer for the paginated parent-categories-with-subcategories endpoint.
+    Matches the frontend shape expected by getMainCategoriesandSubcategories().
+    """
+    subcategories = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Category
+        fields = ['id', 'name', 'subcategories']
+
+    def get_subcategories(self, obj):
+        children = obj.children.filter(is_active=True).order_by('sort_order', 'name')
+        # Forward context so SubcategorySerializer can resolve image_url
+        return SubcategorySerializer(children, many=True, context=self.context).data
+
+
 class TagSerializer(serializers.ModelSerializer):
     class Meta:
         model = Tag
