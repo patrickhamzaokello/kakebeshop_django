@@ -3,9 +3,12 @@ from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.pagination import PageNumberPagination
 from django_filters.rest_framework import DjangoFilterBackend
-from django.db.models import Count, Q
+from django.conf import settings
+from django.db.models import Count, Q, OuterRef, Subquery, F, IntegerField, ExpressionWrapper
+from django.db.models import Prefetch
 from django.shortcuts import get_object_or_404
 from .models import Category, Tag
+from kakebe_apps.imagehandler.models import ImageAsset
 from .serializers import (
     CategoryListSerializer,
     CategoryDetailSerializer,
@@ -73,7 +76,7 @@ class CategoryViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         """Base queryset with optimizations"""
         # For admin users, show all categories
-        if self.request.user and self.request.user.is_staff:
+        if self.request.user.is_authenticated and self.request.user.is_staff:
             queryset = Category.objects.all()
         else:
             # For regular users, only show active categories
@@ -289,6 +292,50 @@ class CategoryViewSet(viewsets.ModelViewSet):
             'updated_at': category.updated_at
         })
 
+    @action(detail=False, methods=['get'], url_path='search')
+    def search(self, request):
+        """
+        Search categories by name or description.
+
+        GET /api/v1/categories/search/
+        Query params:
+          q        - search term (required, min 1 char)
+          type     - 'parent' | 'sub' | 'all' (default: 'all')
+          limit    - max results to return (default: 20, max: 50)
+        """
+        q = request.query_params.get('q', '').strip()
+        if not q:
+            return Response(
+                {'success': False, 'error': 'Query parameter "q" is required.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        try:
+            limit = min(50, max(1, int(request.query_params.get('limit', 20))))
+        except (ValueError, TypeError):
+            limit = 20
+
+        qs = Category.objects.filter(is_active=True).annotate(
+            children_count=Count('children', filter=Q(children__is_active=True))
+        ).select_related('parent').filter(
+            Q(name__icontains=q) | Q(description__icontains=q)
+        ).order_by('sort_order', 'name')
+
+        category_type = request.query_params.get('type', 'all').lower()
+        if category_type == 'parent':
+            qs = qs.filter(parent=None)
+        elif category_type == 'sub':
+            qs = qs.exclude(parent=None)
+
+        results = list(qs[:limit])
+        serializer = CategoryListSerializer(results, many=True)
+        return Response({
+            'success': True,
+            'count': len(results),
+            'query': q,
+            'data': serializer.data,
+        })
+
     @action(detail=False, methods=['get'], url_path='with-subcategories')
     def with_subcategories(self, request):
         """
@@ -310,11 +357,6 @@ class CategoryViewSet(viewsets.ModelViewSet):
           "previous": "page=N" | null
         }
         """
-        from django.conf import settings
-        from django.db.models import OuterRef, Subquery, F, IntegerField, ExpressionWrapper
-        from kakebe_apps.listings.models import Listing
-        from kakebe_apps.imagehandler.models import ImageAsset
-
         try:
             page = max(1, int(request.query_params.get('page', 1)))
         except (ValueError, TypeError):
@@ -325,10 +367,15 @@ class CategoryViewSet(viewsets.ModelViewSet):
         except (ValueError, TypeError):
             limit = 10
 
+        active_children_prefetch = Prefetch(
+            'children',
+            queryset=Category.objects.filter(is_active=True).order_by('sort_order', 'name'),
+            to_attr='_active_children',
+        )
         queryset = Category.objects.filter(
             is_active=True,
             parent=None,
-        ).prefetch_related('children').order_by('sort_order', 'name')
+        ).prefetch_related(active_children_prefetch).order_by('sort_order', 'name')
 
         total_count = queryset.count()
         start = (page - 1) * limit

@@ -3,13 +3,15 @@ from django.contrib import admin
 from django.db.models import Count, Q
 from django.utils.html import format_html
 from django.urls import reverse
-from django.utils.safestring import mark_safe
 from .models import Category, Tag
 
 
 class ChildCategoryInline(admin.TabularInline):
     """Inline for managing child categories"""
     model = Category
+    # Required for self-referential FK so Django knows which FK field
+    # links the inline to the parent (not the other direction).
+    fk_name = 'parent'
     extra = 0
     fields = ['name', 'slug', 'icon', 'is_active', 'is_featured', 'sort_order']
     prepopulated_fields = {'slug': ('name',)}
@@ -263,14 +265,10 @@ class CategoryAdmin(admin.ModelAdmin):
         self.message_user(request, f'Cart disabled for {updated} categor{"y" if updated == 1 else "ies"}.')
 
     def save_model(self, request, obj, form, change):
-        """Custom save logic"""
+        """Custom save logic — delegate entirely to super().
+        Django admin already shows its own success message after save;
+        adding one here caused duplicate messages."""
         super().save_model(request, obj, form, change)
-
-        # Log message
-        if change:
-            self.message_user(request, f'Category "{obj.name}" updated successfully.')
-        else:
-            self.message_user(request, f'Category "{obj.name}" created successfully.')
 
 
 @admin.register(Tag)
@@ -301,6 +299,12 @@ class TagAdmin(admin.ModelAdmin):
     # Pagination
     list_per_page = 50
 
+    def get_queryset(self, request):
+        """Annotate listing count to avoid N+1 on usage_count column."""
+        return super().get_queryset(request).annotate(
+            _listing_count=Count('listings')
+        )
+
     # Custom display methods
     def name_display(self, obj):
         """Display name with tag icon"""
@@ -321,12 +325,16 @@ class TagAdmin(admin.ModelAdmin):
     created_at_display.admin_order_field = 'created_at'
 
     def usage_count(self, obj):
-        """Display usage count (placeholder - implement based on your product model)"""
-        # TODO: Add actual count based on your product-tag relationship
-        # Example: count = obj.products.count()
-        return format_html('<span style="color: #999;">N/A</span>')
+        """Number of listings using this tag (from annotated queryset — no extra query)."""
+        count = getattr(obj, '_listing_count', None)
+        if count is None:
+            count = obj.listings.count()
+        if count:
+            return format_html('<span style="font-weight: bold;">{}</span>', count)
+        return format_html('<span style="color: #999;">0</span>')
 
-    usage_count.short_description = 'Usage'
+    usage_count.short_description = 'Listings'
+    usage_count.admin_order_field = '_listing_count'
 
 
 # Optional: Custom admin site configuration

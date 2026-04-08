@@ -23,6 +23,12 @@ class CategoryWithSubcategoriesSerializer(serializers.ModelSerializer):
     """
     Serializer for the paginated parent-categories-with-subcategories endpoint.
     Matches the frontend shape expected by getMainCategoriesandSubcategories().
+
+    Expects the view to prefetch children via:
+        Prefetch('children',
+                 queryset=Category.objects.filter(is_active=True).order_by('sort_order', 'name'),
+                 to_attr='_active_children')
+    Falls back to a live DB query if the prefetch attr is absent.
     """
     subcategories = serializers.SerializerMethodField()
 
@@ -31,8 +37,10 @@ class CategoryWithSubcategoriesSerializer(serializers.ModelSerializer):
         fields = ['id', 'name', 'subcategories']
 
     def get_subcategories(self, obj):
-        children = obj.children.filter(is_active=True).order_by('sort_order', 'name')
-        # Forward context so SubcategorySerializer can resolve image_url
+        # Use the prefetched attr to avoid N+1 queries.
+        children = getattr(obj, '_active_children', None)
+        if children is None:
+            children = obj.children.filter(is_active=True).order_by('sort_order', 'name')
         return SubcategorySerializer(children, many=True, context=self.context).data
 
 
@@ -178,16 +186,8 @@ class CategoryCreateSerializer(serializers.ModelSerializer):
         return value
 
     def validate(self, attrs):
-        """Additional validation"""
-        # Prevent circular parent relationships
-        if attrs.get('parent'):
-            parent = attrs['parent']
-            # Check if parent has this category's parent as its parent (simple check)
-            # For deep checking, you'd need to traverse the tree
-            if parent.parent and parent.parent == self.instance:
-                raise serializers.ValidationError(
-                    "Cannot create circular parent relationship."
-                )
+        """Additional validation — no circular parent check needed on create;
+        full ancestry traversal is handled by CategoryUpdateSerializer."""
         return attrs
 
 
