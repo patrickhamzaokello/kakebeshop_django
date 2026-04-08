@@ -310,7 +310,8 @@ class CategoryViewSet(viewsets.ModelViewSet):
           "previous": "page=N" | null
         }
         """
-        from django.db.models import OuterRef, Subquery, F
+        from django.conf import settings
+        from django.db.models import OuterRef, Subquery, F, IntegerField, ExpressionWrapper
         from kakebe_apps.listings.models import Listing
         from kakebe_apps.imagehandler.models import ImageAsset
 
@@ -345,15 +346,20 @@ class CategoryViewSet(viewsets.ModelViewSet):
         )
 
         # ── Step 2: find the most trending listing per subcategory ────────────
-        # "Trending" = highest combined (views_count + contact_count)
+        # "Trending" = highest combined (views_count + contact_count).
+        # Annotate the score first so Django knows the output_field — required
+        # for the expression to work correctly inside a Subquery ordering.
         trending_listing_subquery = Listing.objects.filter(
             category=OuterRef('pk'),
             status='ACTIVE',
             is_verified=True,
             deleted_at__isnull=True,
-        ).order_by(
-            (F('views_count') + F('contact_count')).desc()
-        ).values('id')[:1]
+        ).annotate(
+            trend_score=ExpressionWrapper(
+                F('views_count') + F('contact_count'),
+                output_field=IntegerField(),
+            )
+        ).order_by('-trend_score').values('id')[:1]
 
         subcats_annotated = Category.objects.filter(
             id__in=all_subcategory_ids
