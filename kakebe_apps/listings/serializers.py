@@ -3,6 +3,7 @@
 
 from rest_framework import serializers
 from django.utils import timezone
+from django.utils.text import slugify
 from .models import Listing, ListingTag, ListingBusinessHour
 from kakebe_apps.categories.serializers import CategoryListSerializer as CategorySerializer, TagSerializer
 from kakebe_apps.merchants.serializers import MerchantListSerializer
@@ -91,10 +92,11 @@ class ListingDetailSerializer(serializers.ModelSerializer):
 
 class ListingCreateSerializer(serializers.ModelSerializer):
     """Serializer for creating listings"""
-    tag_ids = serializers.ListField(
-        child=serializers.IntegerField(),
+    tags = serializers.ListField(
+        child=serializers.CharField(max_length=50),
         write_only=True,
-        required=False
+        required=False,
+        default=list,
     )
     image_group_ids = serializers.ListField(
         child=serializers.UUIDField(),
@@ -114,7 +116,7 @@ class ListingCreateSerializer(serializers.ModelSerializer):
             'title', 'description', 'listing_type', 'category',
             'price_type', 'price', 'price_min',
             'price_max', 'currency', 'is_price_negotiable',
-            'tag_ids', 'image_group_ids', 'business_hours_data', 'metadata'
+            'tags', 'image_group_ids', 'business_hours_data', 'metadata'
         ]
 
     def validate(self, attrs):
@@ -157,7 +159,7 @@ class ListingCreateSerializer(serializers.ModelSerializer):
         return attrs
 
     def create(self, validated_data):
-        tag_ids = validated_data.pop('tag_ids', [])
+        tag_names = validated_data.pop('tags', [])
         image_group_ids = validated_data.pop('image_group_ids', [])
         business_hours_data = validated_data.pop('business_hours_data', [])
 
@@ -172,11 +174,20 @@ class ListingCreateSerializer(serializers.ModelSerializer):
             **validated_data
         )
 
-        # Add tags
-        if tag_ids:
+        # Add tags — create any that don't exist yet
+        if tag_names:
             from kakebe_apps.categories.models import Tag
-            tags = Tag.objects.filter(id__in=tag_ids)
-            listing.tags.set(tags)
+            tag_objs = []
+            for name in tag_names:
+                name = name.strip().lower()
+                if name:
+                    tag, _ = Tag.objects.get_or_create(
+                        slug=slugify(name),
+                        defaults={'name': name}
+                    )
+                    tag_objs.append(tag)
+            if tag_objs:
+                listing.tags.set(tag_objs)
 
         # Attach images to listing
         if image_group_ids:
@@ -203,10 +214,11 @@ class ListingUpdateSerializer(serializers.ModelSerializer):
 
     FIXED: Validation logic was previously unreachable - now properly structured
     """
-    tag_ids = serializers.ListField(
-        child=serializers.IntegerField(),
+    tags = serializers.ListField(
+        child=serializers.CharField(max_length=50),
         write_only=True,
-        required=False
+        required=False,
+        default=list,
     )
     add_image_group_ids = serializers.ListField(
         child=serializers.UUIDField(),
@@ -227,7 +239,7 @@ class ListingUpdateSerializer(serializers.ModelSerializer):
             'title', 'description', 'listing_type', 'category',
             'price_type', 'price', 'price_min',
             'price_max', 'currency', 'is_price_negotiable',
-            'tag_ids', 'metadata', 'status',
+            'tags', 'metadata', 'status',
             'add_image_group_ids', 'remove_image_group_ids'
         ]
 
@@ -309,7 +321,7 @@ class ListingUpdateSerializer(serializers.ModelSerializer):
         return attrs
 
     def update(self, instance, validated_data):
-        tag_ids = validated_data.pop('tag_ids', None)
+        tag_names = validated_data.pop('tags', None)
         add_image_groups = validated_data.pop('add_image_group_ids', [])
         remove_image_groups = validated_data.pop('remove_image_group_ids', [])
 
@@ -324,11 +336,19 @@ class ListingUpdateSerializer(serializers.ModelSerializer):
 
         instance.save()
 
-        # Update tags if provided
-        if tag_ids is not None:
+        # Update tags if provided — create any that don't exist yet
+        if tag_names is not None:
             from kakebe_apps.categories.models import Tag
-            tags = Tag.objects.filter(id__in=tag_ids)
-            instance.tags.set(tags)
+            tag_objs = []
+            for name in tag_names:
+                name = name.strip().lower()
+                if name:
+                    tag, _ = Tag.objects.get_or_create(
+                        slug=slugify(name),
+                        defaults={'name': name}
+                    )
+                    tag_objs.append(tag)
+            instance.tags.set(tag_objs)
 
         # Add image groups
         if add_image_groups:
