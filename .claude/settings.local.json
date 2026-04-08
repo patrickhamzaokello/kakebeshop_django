@@ -10,7 +10,9 @@
       "Bash(python3:*)",
       "Bash(docker exec:*)",
       "Bash(docker restart kakebe_celery_container:*)",
-      "Bash(pip3 show:*)"
+      "Bash(pip3 show:*)",
+      "Bash(docker stats:*)",
+      "Bash(docker compose:*)"
     ]
   }
 }
