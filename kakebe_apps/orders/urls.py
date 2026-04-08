@@ -19,6 +19,8 @@ Order Management:
 GET    /api/v1/orders/                    - List all orders
 GET    /api/v1/orders/{id}/               - Get single order
 GET    /api/v1/orders/my-orders/          - Get filtered orders
+GET    /api/v1/orders/buyer-search/       - Buyer searches their placed orders
+GET    /api/v1/orders/merchant-search/    - Merchant searches received orders
 POST   /api/v1/orders/checkout/           - Place orders from cart
 POST   /api/v1/orders/{id}/confirm/       - Confirm order (merchant)
 POST   /api/v1/orders/{id}/complete/      - Complete order (merchant)

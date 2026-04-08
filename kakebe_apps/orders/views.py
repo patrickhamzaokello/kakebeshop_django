@@ -402,6 +402,127 @@ class OrderIntentViewSet(viewsets.ModelViewSet):
             'data': serializer.data
         })
 
+    @action(detail=False, methods=['get'], url_path='buyer-search')
+    def buyer_search(self, request):
+        """
+        Buyer searches their own placed orders.
+
+        GET /api/v1/orders/orders/buyer-search/
+        Query params:
+          q          - search order_number or merchant name (optional)
+          status     - NEW | CONTACTED | CONFIRMED | COMPLETED | CANCELLED (optional)
+          date_from  - ISO date YYYY-MM-DD (optional)
+          date_to    - ISO date YYYY-MM-DD (optional)
+          min_amount - minimum total_amount (optional)
+          max_amount - maximum total_amount (optional)
+        """
+        qs = OrderIntent.objects.select_related(
+            'buyer', 'merchant', 'address', 'order_group'
+        ).prefetch_related(
+            'items__listing__merchant',
+            'items__listing__category',
+        ).filter(buyer=request.user).order_by('-created_at')
+
+        q = request.query_params.get('q', '').strip()
+        if q:
+            qs = qs.filter(
+                Q(order_number__icontains=q) |
+                Q(merchant__display_name__icontains=q)
+            )
+
+        order_status = request.query_params.get('status', '').strip().upper()
+        if order_status:
+            qs = qs.filter(status=order_status)
+
+        date_from = request.query_params.get('date_from')
+        if date_from:
+            qs = qs.filter(created_at__date__gte=date_from)
+
+        date_to = request.query_params.get('date_to')
+        if date_to:
+            qs = qs.filter(created_at__date__lte=date_to)
+
+        min_amount = request.query_params.get('min_amount')
+        if min_amount:
+            qs = qs.filter(total_amount__gte=min_amount)
+
+        max_amount = request.query_params.get('max_amount')
+        if max_amount:
+            qs = qs.filter(total_amount__lte=max_amount)
+
+        orders = list(qs)
+        _attach_primary_images(orders)
+        serializer = self.get_serializer(orders, many=True)
+        return Response({
+            'success': True,
+            'count': len(orders),
+            'data': serializer.data
+        })
+
+    @action(detail=False, methods=['get'], url_path='merchant-search')
+    def merchant_search(self, request):
+        """
+        Merchant searches orders they have received.
+
+        GET /api/v1/orders/orders/merchant-search/
+        Query params:
+          q          - search order_number, buyer name, or buyer phone (optional)
+          status     - NEW | CONTACTED | CONFIRMED | COMPLETED | CANCELLED (optional)
+          date_from  - ISO date YYYY-MM-DD (optional)
+          date_to    - ISO date YYYY-MM-DD (optional)
+          min_amount - minimum total_amount (optional)
+          max_amount - maximum total_amount (optional)
+        """
+        if not hasattr(request.user, 'merchant_profile'):
+            return Response({
+                'success': False,
+                'error': 'Only merchants can access this endpoint'
+            }, status=status.HTTP_403_FORBIDDEN)
+
+        qs = OrderIntent.objects.select_related(
+            'buyer', 'merchant', 'address', 'order_group'
+        ).prefetch_related(
+            'items__listing__merchant',
+            'items__listing__category',
+        ).filter(merchant=request.user.merchant_profile).order_by('-created_at')
+
+        q = request.query_params.get('q', '').strip()
+        if q:
+            qs = qs.filter(
+                Q(order_number__icontains=q) |
+                Q(buyer__name__icontains=q) |
+                Q(buyer__phone__icontains=q)
+            )
+
+        order_status = request.query_params.get('status', '').strip().upper()
+        if order_status:
+            qs = qs.filter(status=order_status)
+
+        date_from = request.query_params.get('date_from')
+        if date_from:
+            qs = qs.filter(created_at__date__gte=date_from)
+
+        date_to = request.query_params.get('date_to')
+        if date_to:
+            qs = qs.filter(created_at__date__lte=date_to)
+
+        min_amount = request.query_params.get('min_amount')
+        if min_amount:
+            qs = qs.filter(total_amount__gte=min_amount)
+
+        max_amount = request.query_params.get('max_amount')
+        if max_amount:
+            qs = qs.filter(total_amount__lte=max_amount)
+
+        orders = list(qs)
+        _attach_primary_images(orders)
+        serializer = self.get_serializer(orders, many=True)
+        return Response({
+            'success': True,
+            'count': len(orders),
+            'data': serializer.data
+        })
+
     @action(detail=False, methods=['get'], url_path='my-orders')
     def my_orders(self, request):
         """Get filtered orders"""
