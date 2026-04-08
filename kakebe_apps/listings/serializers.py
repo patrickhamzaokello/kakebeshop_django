@@ -50,6 +50,8 @@ class ListingListSerializer(serializers.ModelSerializer):
         ]
 
     def get_primary_image(self, obj):
+        if hasattr(obj, '_cached_primary_image'):
+            return obj._cached_primary_image
         return obj.primary_image
 
 

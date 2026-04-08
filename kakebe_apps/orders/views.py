@@ -5,6 +5,7 @@ from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
 from django.db import transaction
 from django.shortcuts import get_object_or_404
+from django.conf import settings
 
 from django.db.models import Q
 
@@ -18,6 +19,66 @@ from kakebe_apps.cart.models import Cart
 from kakebe_apps.location.models import UserAddress
 
 
+def _attach_primary_images(orders):
+    """
+    Bulk-load thumbnail images for all listings across a set of orders.
+    Replaces 1-3 DB queries per listing with a single query for all listings.
+    Sets `_cached_primary_image` on each Listing instance so that
+    ListingListSerializer uses the cache instead of the N+1 property.
+    """
+    from kakebe_apps.imagehandler.models import ImageAsset
+    from collections import defaultdict
+
+    listings = []
+    for order in orders:
+        for item in order.items.all():
+            listings.append(item.listing)
+
+    if not listings:
+        return
+
+    listing_ids = list({l.id for l in listings})
+
+    assets = list(
+        ImageAsset.objects.filter(
+            image_type='listing',
+            object_id__in=listing_ids,
+            is_confirmed=True,
+        )
+        .order_by('object_id', 'order', 'created_at')
+        .values('id', 'object_id', 'image_group_id', 'variant', 's3_key', 'width', 'height')
+    )
+
+    # First image group per listing (ordering guarantees earliest/lowest wins)
+    listing_first_group = {}
+    group_variants = defaultdict(dict)
+    for asset in assets:
+        lid = asset['object_id']
+        gid = asset['image_group_id']
+        if lid not in listing_first_group:
+            listing_first_group[lid] = gid
+        group_variants[gid].setdefault(asset['variant'], asset)
+
+    def _best(variants):
+        for v in ('thumb', 'medium', 'large'):
+            if v in variants:
+                return variants[v]
+        return next(iter(variants.values()), None)
+
+    cdn = getattr(settings, 'AWS_CLOUDFRONT_DOMAIN', '')
+    for listing in listings:
+        first_group = listing_first_group.get(listing.id)
+        asset = _best(group_variants.get(first_group, {})) if first_group else None
+        listing._cached_primary_image = {
+            'id': str(asset['id']),
+            'image': f"{cdn}/{asset['s3_key']}",
+            'width': asset['width'],
+            'height': asset['height'],
+            'variant': asset['variant'],
+            'image_group_id': str(asset['image_group_id']),
+        } if asset else None
+
+
 class OrderIntentViewSet(viewsets.ModelViewSet):
     """
     ViewSet for OrderIntent with automatic notification via signals
@@ -28,11 +89,27 @@ class OrderIntentViewSet(viewsets.ModelViewSet):
     serializer_class = OrderIntentSerializer
     permission_classes = [IsAuthenticated]
 
+    def list(self, request, *args, **kwargs):
+        queryset = self.filter_queryset(self.get_queryset())
+        orders = list(queryset)
+        _attach_primary_images(orders)
+        serializer = self.get_serializer(orders, many=True)
+        return Response({'success': True, 'count': len(orders), 'data': serializer.data})
+
+    def retrieve(self, request, *args, **kwargs):
+        instance = self.get_object()
+        _attach_primary_images([instance])
+        serializer = self.get_serializer(instance)
+        return Response({'success': True, 'data': serializer.data})
+
     def get_queryset(self):
         user = self.request.user
         qs_base = OrderIntent.objects.select_related(
             'buyer', 'merchant', 'address', 'order_group'
-        ).prefetch_related('items__listing').order_by('-created_at')
+        ).prefetch_related(
+            'items__listing__merchant',
+            'items__listing__category',
+        ).order_by('-created_at')
 
         if hasattr(user, 'merchant_profile'):
             # Return orders where user is buyer OR merchant
@@ -160,11 +237,14 @@ class OrderIntentViewSet(viewsets.ModelViewSet):
                 cart.clear_cart()
 
             order_ids = [o.id for o in orders]
-            orders_with_items = OrderIntent.objects.filter(
-                id__in=order_ids
-            ).select_related(
-                'buyer', 'merchant', 'address', 'order_group'
-            ).prefetch_related('items__listing__merchant', 'items__listing__category')
+            orders_with_items = list(
+                OrderIntent.objects.filter(
+                    id__in=order_ids
+                ).select_related(
+                    'buyer', 'merchant', 'address', 'order_group'
+                ).prefetch_related('items__listing__merchant', 'items__listing__category')
+            )
+            _attach_primary_images(orders_with_items)
             serialized_orders = OrderIntentSerializer(orders_with_items, many=True)
 
             return Response({
@@ -332,15 +412,20 @@ class OrderIntentViewSet(viewsets.ModelViewSet):
             queryset = queryset.filter(status=order_status.upper())
 
         role = request.query_params.get('role')
+        _base = OrderIntent.objects.select_related(
+            'buyer', 'merchant', 'address', 'order_group'
+        ).prefetch_related('items__listing__merchant', 'items__listing__category')
         if role == 'merchant' and hasattr(request.user, 'merchant_profile'):
-            queryset = OrderIntent.objects.filter(merchant=request.user.merchant_profile)
+            queryset = _base.filter(merchant=request.user.merchant_profile)
         elif role == 'buyer':
-            queryset = OrderIntent.objects.filter(buyer=request.user)
+            queryset = _base.filter(buyer=request.user)
 
-        serializer = self.get_serializer(queryset, many=True)
+        orders = list(queryset)
+        _attach_primary_images(orders)
+        serializer = self.get_serializer(orders, many=True)
         return Response({
             'success': True,
-            'count': queryset.count(),
+            'count': len(orders),
             'data': serializer.data
         })
 
@@ -349,6 +434,19 @@ class OrderGroupViewSet(viewsets.ReadOnlyModelViewSet):
     """ViewSet for OrderGroup"""
     serializer_class = OrderGroupSerializer
     permission_classes = [IsAuthenticated]
+
+    def list(self, request, *args, **kwargs):
+        groups = list(self.filter_queryset(self.get_queryset()))
+        orders = [o for g in groups for o in g.orders.all()]
+        _attach_primary_images(orders)
+        serializer = self.get_serializer(groups, many=True)
+        return Response({'success': True, 'count': len(groups), 'data': serializer.data})
+
+    def retrieve(self, request, *args, **kwargs):
+        group = self.get_object()
+        _attach_primary_images(list(group.orders.all()))
+        serializer = self.get_serializer(group)
+        return Response({'success': True, 'data': serializer.data})
 
     def get_queryset(self):
         return OrderGroup.objects.filter(
@@ -404,15 +502,17 @@ class OrderGroupViewSet(viewsets.ReadOnlyModelViewSet):
     def orders(self, request, pk=None):
         """Get all orders in group"""
         order_group = self.get_object()
-        orders = OrderIntent.objects.filter(
-            order_group=order_group
-        ).select_related(
-            'buyer', 'merchant', 'address', 'order_group'
-        ).prefetch_related('items__listing__merchant', 'items__listing__category')
-
+        orders = list(
+            OrderIntent.objects.filter(
+                order_group=order_group
+            ).select_related(
+                'buyer', 'merchant', 'address', 'order_group'
+            ).prefetch_related('items__listing__merchant', 'items__listing__category')
+        )
+        _attach_primary_images(orders)
         serializer = OrderIntentSerializer(orders, many=True)
         return Response({
             'success': True,
-            'count': orders.count(),
+            'count': len(orders),
             'data': serializer.data
         })
