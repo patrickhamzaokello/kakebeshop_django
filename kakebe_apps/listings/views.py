@@ -412,7 +412,6 @@ class ListingViewSet(viewsets.ViewSet):
         return Response(serializer.data)
 
     def create(self, request):
-        """Create a new listing (requires merchant profile)"""
         if not hasattr(request.user, 'merchant_profile'):
             return Response(
                 {'detail': 'You must have a merchant profile to create listings.'},
@@ -425,20 +424,8 @@ class ListingViewSet(viewsets.ViewSet):
         )
         serializer.is_valid(raise_exception=True)
 
-        # Extract related data
-        tag_ids = serializer.validated_data.pop('tag_ids', [])
-        image_group_ids = serializer.validated_data.pop('image_group_ids', [])
-        business_hours_data = serializer.validated_data.pop('business_hours_data', [])
-
         try:
-            # Use service layer for business logic
-            listing = ListingService.create_listing(
-                merchant=request.user.merchant_profile,
-                validated_data=serializer.validated_data,
-                tag_ids=tag_ids,
-                image_group_ids=image_group_ids,
-                business_hours_data=business_hours_data
-            )
+            listing = serializer.save()  # serializer.create() handles tags/images/hours
 
             logger.info(
                 f"Listing created successfully: {listing.id}",
@@ -447,7 +434,6 @@ class ListingViewSet(viewsets.ViewSet):
                     'listing_id': str(listing.id)
                 }
             )
-
             return Response(
                 ListingDetailSerializer(listing, context={'request': request}).data,
                 status=status.HTTP_201_CREATED
@@ -464,7 +450,6 @@ class ListingViewSet(viewsets.ViewSet):
             )
 
     def partial_update(self, request, pk=None):
-        """Update own listing"""
         if not hasattr(request.user, 'merchant_profile'):
             return Response(
                 {'detail': 'You must have a merchant profile.'},
@@ -485,24 +470,10 @@ class ListingViewSet(viewsets.ViewSet):
         )
         serializer.is_valid(raise_exception=True)
 
-        # Extract related data
-        tag_ids = serializer.validated_data.pop('tag_ids', None)
-        add_image_groups = serializer.validated_data.pop('add_image_group_ids', [])
-        remove_image_groups = serializer.validated_data.pop('remove_image_group_ids', [])
-
         try:
-            # Use service layer
-            listing = ListingService.update_listing(
-                listing=listing,
-                validated_data=serializer.validated_data,
-                tag_ids=tag_ids,
-                add_image_groups=add_image_groups,
-                remove_image_groups=remove_image_groups
-            )
+            listing = serializer.save()  # serializer.update() handles tags/images
 
-            # Clear similarity cache when listing is updated
             ListingService.clear_similarity_cache(listing)
-
             logger.info(f"Listing updated: {listing.id}")
 
             return Response(
