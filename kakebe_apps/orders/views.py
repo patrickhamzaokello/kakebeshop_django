@@ -159,7 +159,13 @@ class OrderIntentViewSet(viewsets.ModelViewSet):
 
                 cart.clear_cart()
 
-            serialized_orders = OrderIntentSerializer(orders, many=True)
+            order_ids = [o.id for o in orders]
+            orders_with_items = OrderIntent.objects.filter(
+                id__in=order_ids
+            ).select_related(
+                'buyer', 'merchant', 'address', 'order_group'
+            ).prefetch_related('items__listing__merchant', 'items__listing__category')
+            serialized_orders = OrderIntentSerializer(orders_with_items, many=True)
 
             return Response({
                 'success': True,
@@ -347,7 +353,13 @@ class OrderGroupViewSet(viewsets.ReadOnlyModelViewSet):
     def get_queryset(self):
         return OrderGroup.objects.filter(
             buyer=self.request.user
-        ).prefetch_related('orders__items', 'orders__merchant').order_by('-created_at')
+        ).prefetch_related(
+            'orders__items__listing__merchant',
+            'orders__items__listing__category',
+            'orders__merchant',
+            'orders__buyer',
+            'orders__address',
+        ).order_by('-created_at')
 
     @action(detail=True, methods=['post'], url_path='update-all-statuses')
     def update_all_statuses(self, request, pk=None):
@@ -392,7 +404,11 @@ class OrderGroupViewSet(viewsets.ReadOnlyModelViewSet):
     def orders(self, request, pk=None):
         """Get all orders in group"""
         order_group = self.get_object()
-        orders = order_group.orders.all()
+        orders = OrderIntent.objects.filter(
+            order_group=order_group
+        ).select_related(
+            'buyer', 'merchant', 'address', 'order_group'
+        ).prefetch_related('items__listing__merchant', 'items__listing__category')
 
         serializer = OrderIntentSerializer(orders, many=True)
         return Response({
