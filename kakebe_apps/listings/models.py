@@ -220,7 +220,7 @@ class Listing(models.Model):
             ).first()
 
             # Only add if we have at least one variant (preferably both)
-            group_dict = {}
+            group_dict = {'image_group_id': str(group_id)}
 
             if thumb_image:
                 group_dict['thumb'] = {
