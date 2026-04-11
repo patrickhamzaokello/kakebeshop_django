@@ -20,7 +20,8 @@ from .serializers import (
     ListingCreateSerializer,
     ListingUpdateSerializer,
     ListingBusinessHourSerializer,
-    ListingBusinessHourCreateSerializer
+    ListingBusinessHourCreateSerializer,
+    MyListingSerializer,
 )
 from .services import ListingService
 
@@ -384,29 +385,59 @@ class ListingViewSet(viewsets.ViewSet):
         permission_classes=[permissions.IsAuthenticated, HasMerchantProfile]
     )
     def my_listings(self, request):
-        """Get authenticated merchant's listings (all statuses)"""
+        """
+        List the authenticated merchant's own listings with search,
+        status filter, and ordering.
+
+        Query params:
+          search    - full-text search across title and description
+          status    - ACTIVE | PENDING | REJECTED | INACTIVE | DRAFT | EXPIRED
+          ordering  - created_at | -created_at (default) |
+                      price | -price | views_count | -views_count
+          page / page_size — standard pagination
+        """
         merchant = request.user.merchant_profile
         queryset = Listing.objects.filter(
             merchant=merchant,
             deleted_at__isnull=True
-        ).select_related('category').prefetch_related('tags')
+        ).select_related('category')
 
-        # Filter by status if provided
-        status_filter = request.query_params.get('status', None)
+        # Search across title and description
+        search = request.query_params.get('search')
+        if search:
+            queryset = queryset.filter(
+                Q(title__icontains=search) |
+                Q(description__icontains=search)
+            )
+
+        # Filter by status
+        status_filter = request.query_params.get('status')
         if status_filter:
             queryset = queryset.filter(status=status_filter)
+
+        # Ordering
+        ALLOWED_ORDERING = {
+            'created_at': 'created_at',
+            '-created_at': '-created_at',
+            'price': 'price',
+            '-price': '-price',
+            'views_count': 'views_count',
+            '-views_count': '-views_count',
+        }
+        ordering = request.query_params.get('ordering', '-created_at')
+        queryset = queryset.order_by(ALLOWED_ORDERING.get(ordering, '-created_at'))
 
         # Apply pagination
         paginator = self.pagination_class()
         page = paginator.paginate_queryset(queryset, request)
 
         if page is not None:
-            serializer = ListingDetailSerializer(
+            serializer = MyListingSerializer(
                 page, many=True, context={'request': request}
             )
             return paginator.get_paginated_response(serializer.data)
 
-        serializer = ListingDetailSerializer(
+        serializer = MyListingSerializer(
             queryset, many=True, context={'request': request}
         )
         return Response(serializer.data)

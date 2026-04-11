@@ -380,6 +380,27 @@ class ListingUpdateSerializer(serializers.ModelSerializer):
         return instance
 
 
+class MyListingSerializer(serializers.ModelSerializer):
+    """Lightweight serializer for a merchant's own listing list."""
+    category_name = serializers.CharField(source='category.name', read_only=True)
+    primary_image = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Listing
+        fields = [
+            'id', 'title', 'description', 'listing_type',
+            'category_name', 'price_type', 'price', 'price_min',
+            'price_max', 'currency', 'status', 'is_featured',
+            'is_verified', 'views_count', 'contact_count',
+            'primary_image', 'created_at', 'updated_at',
+        ]
+
+    def get_primary_image(self, obj):
+        if hasattr(obj, '_cached_primary_image'):
+            return obj._cached_primary_image
+        return obj.primary_image
+
+
 class ListingBusinessHourCreateSerializer(serializers.ModelSerializer):
     """Serializer for adding business hours to existing listings"""
 
