@@ -1,28 +1,31 @@
 from django.core.cache import cache
-from django.shortcuts import render
 from rest_framework import generics, status, views, permissions
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.exceptions import ValidationError
 
 
-from .email_templates import get_email_template
 from .serializers import (
     RegisterSerializer, SetNewPasswordSerializer, ResetPasswordEmailRequestSerializer,
     EmailVerificationSerializer, LoginSerializer, LogoutSerializer, VerifyResetCodeSerializer,
     ResendVerificationCodeSerializer, ResendPhoneVerificationSerializer, UpdatePhoneNumberSerializer,
     VerifyPhoneNumberSerializer, AddPhoneNumberSerializer
 )
+from .tasks import (
+    send_verification_email_task,
+    send_resend_verification_email_task,
+    send_welcome_email_task,
+    send_password_reset_email_task,
+    send_password_reset_success_email_task,
+)
 from rest_framework.response import Response
 from rest_framework_simplejwt.tokens import RefreshToken
 from .models import User
 from .twilio_utils import TwilioVerification
-from .utils import Util
 from django.contrib.auth.tokens import default_token_generator
 from django.utils.encoding import force_str, force_bytes
 from django.utils.http import urlsafe_base64_decode, urlsafe_base64_encode
 from drf_yasg.utils import swagger_auto_schema
 from drf_yasg import openapi
-from .renderers import UserRenderer
 from django.http import HttpResponsePermanentRedirect
 import os
 import random
@@ -45,7 +48,6 @@ class CustomRedirect(HttpResponsePermanentRedirect):
 
 class RegisterView(generics.GenericAPIView):
     serializer_class = RegisterSerializer
-    renderer_classes = (UserRenderer,)
 
     @swagger_auto_schema(
         operation_description="Register a new user account",
@@ -74,27 +76,12 @@ class RegisterView(generics.GenericAPIView):
                 'email': user.email
             }, timeout=1800)  # 30 minutes
 
-            # Get email template
-            template_data = get_email_template(
-                'email_verification',
-                user_name=user.name,
-                verification_code=verification_code
+            # Dispatch email in the background — does not block registration
+            send_verification_email_task.delay(
+                user.email,
+                user.name,
+                verification_code,
             )
-
-            # Send email
-            email_sent = Util.send_templated_email(user.email, template_data)
-
-            if not email_sent:
-                logger.error(f"Failed to send verification email to {user.email}")
-                return Response({
-                    'email': user.email,
-                    'name': user.name,
-                    'user_id': str(user.id),
-                    'username': user.username,
-                    'warning': 'Account created but verification email failed to send.',
-                    'message': 'Please use the resend verification code option.',
-                    'verification_required': True
-                }, status=status.HTTP_201_CREATED)
 
             # Success response
             return Response({
@@ -109,10 +96,13 @@ class RegisterView(generics.GenericAPIView):
 
         except ValidationError as e:
             logger.warning(f"Registration validation error: {str(e.detail)}")
-            return Response({
-                'error': 'Registration failed',
-                'details': e.detail
-            }, status=status.HTTP_400_BAD_REQUEST)
+            detail = e.detail
+            if isinstance(detail, list):
+                return Response(
+                    {'error': str(detail[0]) if detail else 'Registration failed'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            return Response({'errors': detail}, status=status.HTTP_400_BAD_REQUEST)
 
         except Exception as e:
             logger.error(f"Unexpected error in registration: {str(e)}", exc_info=True)
@@ -192,16 +182,8 @@ class VerifyEmailAPIView(views.APIView):
             # Clear cache
             cache.delete(cache_key)
 
-            # Send welcome email
-            try:
-                welcome_template = get_email_template(
-                    'welcome_verified',
-                    user_name=user.name,
-                    username=user.username
-                )
-                Util.send_templated_email(user.email, welcome_template)
-            except Exception as e:
-                logger.warning(f"Failed to send welcome email: {str(e)}")
+            # Dispatch welcome email in the background
+            send_welcome_email_task.delay(user.email, user.name, user.username)
 
             # Generate tokens
             refresh = RefreshToken.for_user(user)
@@ -269,23 +251,12 @@ class ResendVerificationCodeAPIView(views.APIView):
                 'email': user.email
             }, timeout=1800)
 
-            # Get email template
-            template_data = get_email_template(
-                'resend_verification',
-                user_name=user.name,
-                verification_code=verification_code
+            # Dispatch email in the background — does not block the response
+            send_resend_verification_email_task.delay(
+                user.email,
+                user.name,
+                verification_code,
             )
-
-            # Send email
-            email_sent = Util.send_templated_email(user.email, template_data)
-
-            if not email_sent:
-                logger.error(f"Failed to resend verification email to {user.email}")
-                cache.delete(cache_key)
-                return Response({
-                    'error': 'Failed to send verification code',
-                    'message': 'Please try again later'
-                }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
             return Response({
                 'success': True,
@@ -317,7 +288,15 @@ class LoginAPIView(generics.GenericAPIView):
             return Response(serializer.data, status=status.HTTP_200_OK)
 
         except ValidationError as e:
-            return Response(e.detail, status=status.HTTP_400_BAD_REQUEST)
+            detail = e.detail
+            if isinstance(detail, list):
+                # Non-field error (e.g. invalid credentials, unverified email)
+                return Response(
+                    {'error': str(detail[0]) if detail else 'Login failed'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            # Field-level errors
+            return Response({'errors': detail}, status=status.HTTP_400_BAD_REQUEST)
 
         except Exception as e:
             logger.error(f"Unexpected error in login: {str(e)}", exc_info=True)
@@ -352,19 +331,8 @@ class RequestPasswordResetEmail(generics.GenericAPIView):
                     'attempts': 0
                 }, timeout=900)  # 15 minutes
 
-                # Get email template
-                template_data = get_email_template(
-                    'password_reset',
-                    user_name=user.name,
-                    reset_code=reset_code
-                )
-
-                # Send email
-                email_sent = Util.send_templated_email(user.email, template_data)
-
-                if not email_sent:
-                    logger.error(f"Failed to send password reset email to {user.email}")
-                    cache.delete(cache_key)
+                # Dispatch email in the background
+                send_password_reset_email_task.delay(user.email, user.name, reset_code)
 
             # Always return success (security best practice)
             return Response({
@@ -483,15 +451,8 @@ class SetNewPasswordAPIView(generics.GenericAPIView):
             reset_session_key = f"reset_session_{user.pk}"
             cache.delete(reset_session_key)
 
-            # Send confirmation email
-            try:
-                confirmation_template = get_email_template(
-                    'password_reset_success',
-                    user_name=user.name
-                )
-                Util.send_templated_email(user.email, confirmation_template)
-            except Exception as e:
-                logger.warning(f"Failed to send password reset confirmation: {str(e)}")
+            # Dispatch confirmation email in the background
+            send_password_reset_success_email_task.delay(user.email, user.name)
 
             return Response({
                 'success': True,
