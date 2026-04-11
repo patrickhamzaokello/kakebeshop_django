@@ -6,7 +6,8 @@ from django.contrib.auth import get_user_model
 from .models import (
      SavedSearch, Conversation, Message,
     ListingReview, MerchantReview, Report, FollowUpRule, FollowUpLog,
-    AdminUser, AuditLog, ApiUsage, ActivityLog, MerchantScore, PushToken
+    AdminUser, AuditLog, ApiUsage, ActivityLog, MerchantScore, PushToken,
+    ListingComment,
 )
 from kakebe_apps.listings.models import Listing
 from kakebe_apps.merchants.models import Merchant
@@ -333,6 +334,81 @@ class PushTokenCreateSerializer(serializers.ModelSerializer):
                 raise serializers.ValidationError("Invalid Expo push token format.")
 
         return value
+
+class ListingCommentReplySerializer(serializers.ModelSerializer):
+    """Lightweight serializer for nested replies."""
+    user_id = serializers.UUIDField(source='user.id', read_only=True)
+    user_name = serializers.CharField(source='user.name', read_only=True)
+    is_owner = serializers.SerializerMethodField()
+
+    class Meta:
+        model = ListingComment
+        fields = ['id', 'user_id', 'user_name', 'body', 'is_owner', 'created_at', 'updated_at']
+
+    def get_is_owner(self, obj):
+        request = self.context.get('request')
+        return bool(request and request.user.is_authenticated and obj.user_id == request.user.id)
+
+
+class ListingCommentSerializer(serializers.ModelSerializer):
+    user_id = serializers.UUIDField(source='user.id', read_only=True)
+    user_name = serializers.CharField(source='user.name', read_only=True)
+    reply_count = serializers.SerializerMethodField()
+    is_owner = serializers.SerializerMethodField()
+
+    class Meta:
+        model = ListingComment
+        fields = [
+            'id', 'listing', 'parent', 'user_id', 'user_name',
+            'body', 'reply_count', 'is_owner', 'created_at', 'updated_at',
+        ]
+        read_only_fields = ['id', 'listing', 'user_id', 'user_name', 'reply_count', 'is_owner', 'created_at', 'updated_at']
+
+    def get_reply_count(self, obj):
+        return obj.replies.filter(is_deleted=False).count()
+
+    def get_is_owner(self, obj):
+        request = self.context.get('request')
+        return bool(request and request.user.is_authenticated and obj.user_id == request.user.id)
+
+
+class ListingCommentCreateSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = ListingComment
+        fields = ['listing', 'parent', 'body']
+
+    def validate_parent(self, value):
+        if value is None:
+            return value
+        listing = self.initial_data.get('listing')
+        if listing and str(value.listing_id) != str(listing):
+            raise serializers.ValidationError("The parent comment does not belong to the same listing.")
+        if value.parent_id is not None:
+            raise serializers.ValidationError("Replies to replies are not allowed. Only one level of nesting is supported.")
+        if value.is_deleted:
+            raise serializers.ValidationError("Cannot reply to a deleted comment.")
+        return value
+
+    def validate_body(self, value):
+        if not value.strip():
+            raise serializers.ValidationError("Comment body cannot be empty.")
+        if len(value) > 2000:
+            raise serializers.ValidationError("Comment body cannot exceed 2000 characters.")
+        return value
+
+
+class ListingCommentUpdateSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = ListingComment
+        fields = ['body']
+
+    def validate_body(self, value):
+        if not value.strip():
+            raise serializers.ValidationError("Comment body cannot be empty.")
+        if len(value) > 2000:
+            raise serializers.ValidationError("Comment body cannot exceed 2000 characters.")
+        return value
+
 
 class PushTokenUpdateUsageSerializer(serializers.Serializer):
     token = serializers.CharField(max_length=200)

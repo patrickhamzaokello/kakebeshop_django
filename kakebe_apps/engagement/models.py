@@ -464,6 +464,32 @@ class OnboardingStatus(models.Model):
             self.completed_at = None
             self.save()
 
+class ListingComment(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    listing = models.ForeignKey(Listing, on_delete=models.CASCADE, related_name='comments')
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='listing_comments')
+    parent = models.ForeignKey(
+        'self', on_delete=models.CASCADE, null=True, blank=True, related_name='replies'
+    )
+    body = models.TextField()
+    is_deleted = models.BooleanField(default=False, db_index=True)
+    created_at = models.DateTimeField(auto_now_add=True, db_index=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = 'listing_comments'
+        ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['listing', 'is_deleted']),
+            models.Index(fields=['user']),
+            models.Index(fields=['parent']),
+            models.Index(fields=['created_at']),
+        ]
+
+    def __str__(self):
+        return f"Comment by {self.user.name} on {self.listing.title}"
+
+
 class PushToken(models.Model):
     """Model to store user push notification tokens"""
 

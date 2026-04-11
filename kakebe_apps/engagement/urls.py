@@ -9,7 +9,7 @@ from .views import (
     MessageViewSet, ListingReviewViewSet,
     MerchantReviewViewSet, ReportViewSet, MerchantScoreViewSet,
     ActivityLogViewSet, AuditLogViewSet, ApiUsageViewSet, UserIntentViewSet, OnboardingStatusViewSet, PushTokenViewSet,
-    EnhancedSearchView
+    EnhancedSearchView, ListingCommentViewSet,
 )
 
 router = DefaultRouter()
@@ -29,15 +29,34 @@ router.register(r'onboarding-status', OnboardingStatusViewSet, basename='onboard
 
 router.register(r'push-tokens', PushTokenViewSet, basename='push-token')
 
+# Direct access to a specific comment (retrieve / edit / delete / replies action)
+router.register(r'listing-comments', ListingCommentViewSet, basename='listing-comment')
 
 
 # Nested messages under conversations
 conversations_router = NestedDefaultRouter(router, r'conversations', lookup='conversation')
 conversations_router.register(r'messages', MessageViewSet, basename='conversation-messages')
 
+
+# Listing-scoped comment endpoints (nested under /listings/<listing_id>/comments/)
+_comment_list_create = ListingCommentViewSet.as_view({'get': 'list', 'post': 'create'})
+_comment_total = ListingCommentViewSet.as_view({'get': 'total'})
+
 urlpatterns = [
     path('', include(router.urls)),
     path('', include(conversations_router.urls)),
     path('search/', EnhancedSearchView.as_view(), name='unified-search'),
 
+    # Paginated comments for a listing + post a comment
+    path(
+        'listings/<uuid:listing_id>/comments/',
+        _comment_list_create,
+        name='listing-comments-list',
+    ),
+    # Total comment count for a listing
+    path(
+        'listings/<uuid:listing_id>/comments/total/',
+        _comment_total,
+        name='listing-comments-total',
+    ),
 ]

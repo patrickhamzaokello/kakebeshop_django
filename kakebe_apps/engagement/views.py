@@ -11,14 +11,17 @@ from django.db import models
 from .models import (
     SavedSearch, Conversation, Message,
     ListingReview, MerchantReview, Report, MerchantScore,
-    ActivityLog, AuditLog, ApiUsage, OnboardingStatus, UserIntent, PushToken
+    ActivityLog, AuditLog, ApiUsage, OnboardingStatus, UserIntent, PushToken,
+    ListingComment,
 )
 from .serializers import (
     SavedSearchSerializer, ConversationSerializer,
     MessageSerializer, ListingReviewSerializer,
     MerchantReviewSerializer, ReportSerializer, MerchantScoreSerializer,
     ActivityLogSerializer, AuditLogSerializer, ApiUsageSerializer, OnboardingStatusSerializer, UserIntentSerializer,
-    PushTokenSerializer, PushTokenCreateSerializer, PushTokenUpdateUsageSerializer
+    PushTokenSerializer, PushTokenCreateSerializer, PushTokenUpdateUsageSerializer,
+    ListingCommentSerializer, ListingCommentCreateSerializer,
+    ListingCommentUpdateSerializer, ListingCommentReplySerializer,
 )
 
 from django.db.models import Q, Value, CharField, F, Case, When, IntegerField
@@ -613,6 +616,146 @@ class PushTokenViewSet(viewsets.ModelViewSet):
 
 
 
+
+
+class CommentPagination(PageNumberPagination):
+    page_size = 20
+    page_size_query_param = 'page_size'
+    max_page_size = 100
+
+
+class ListingCommentViewSet(viewsets.ModelViewSet):
+    """
+    Endpoints for listing comments.
+
+    When accessed via /listings/<listing_id>/comments/:
+      GET    → paginated top-level comments for that listing
+      POST   → post a new comment (or reply when `parent` is supplied)
+
+    When accessed via /listing-comments/<id>/:
+      GET    → retrieve a single comment
+      PATCH  → edit own comment
+      DELETE → soft-delete own comment
+
+    Extra actions:
+      GET  /listings/<listing_id>/comments/total/     → total comment count
+      GET  /listing-comments/<id>/replies/            → paginated replies for a comment
+    """
+
+    permission_classes = [IsAuthenticated]
+    pagination_class = CommentPagination
+
+    def get_serializer_class(self):
+        if self.action == 'create':
+            return ListingCommentCreateSerializer
+        if self.action in ('update', 'partial_update'):
+            return ListingCommentUpdateSerializer
+        if self.action == 'replies':
+            return ListingCommentReplySerializer
+        return ListingCommentSerializer
+
+    def get_queryset(self):
+        listing_id = self.kwargs.get('listing_id')
+        if listing_id:
+            # Listing-scoped: return only top-level, non-deleted comments
+            return (
+                ListingComment.objects
+                .filter(listing_id=listing_id, parent__isnull=True, is_deleted=False)
+                .select_related('user')
+                .prefetch_related('replies')
+            )
+        # Router-scoped (detail endpoints): all non-deleted comments
+        return ListingComment.objects.filter(is_deleted=False).select_related('user')
+
+    def perform_create(self, serializer):
+        listing_id = self.kwargs.get('listing_id')
+        if listing_id:
+            listing = get_object_or_404(
+                Listing, id=listing_id, status='ACTIVE', deleted_at__isnull=True
+            )
+            serializer.save(user=self.request.user, listing=listing)
+        else:
+            serializer.save(user=self.request.user)
+
+    def create(self, request, *args, **kwargs):
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        self.perform_create(serializer)
+        read_serializer = ListingCommentSerializer(
+            serializer.instance, context=self.get_serializer_context()
+        )
+        return Response(
+            {'success': True, 'comment': read_serializer.data},
+            status=status.HTTP_201_CREATED,
+        )
+
+    def partial_update(self, request, *args, **kwargs):
+        instance = self.get_object()
+        if instance.user_id != request.user.id:
+            return Response(
+                {'error': 'You can only edit your own comments.'},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        serializer = self.get_serializer(instance, data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        read_serializer = ListingCommentSerializer(
+            serializer.instance, context=self.get_serializer_context()
+        )
+        return Response({'success': True, 'comment': read_serializer.data})
+
+    def destroy(self, request, *args, **kwargs):
+        instance = self.get_object()
+        if instance.user_id != request.user.id:
+            return Response(
+                {'error': 'You can only delete your own comments.'},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        instance.is_deleted = True
+        instance.save(update_fields=['is_deleted'])
+        return Response({'success': True, 'message': 'Comment deleted.'}, status=status.HTTP_200_OK)
+
+    @action(detail=False, methods=['get'], url_path='total')
+    def total(self, request, listing_id=None):
+        """
+        Return the total number of (non-deleted) comments for a listing.
+        Accessible at:
+          GET /listings/<listing_id>/comments/total/
+          GET /listing-comments/total/?listing=<listing_id>
+        """
+        lid = listing_id or request.query_params.get('listing')
+        if not lid:
+            return Response(
+                {'error': 'A listing ID is required (URL segment or ?listing= param).'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        listing = get_object_or_404(Listing, id=lid)
+        total = ListingComment.objects.filter(listing=listing, is_deleted=False).count()
+        return Response({'listing_id': str(listing.id), 'total_comments': total})
+
+    @action(detail=True, methods=['get'])
+    def replies(self, request, pk=None, listing_id=None):
+        """
+        Return paginated replies for a specific comment.
+        GET /listing-comments/<id>/replies/
+        """
+        comment = self.get_object()
+        qs = (
+            ListingComment.objects
+            .filter(parent=comment, is_deleted=False)
+            .select_related('user')
+            .order_by('created_at')
+        )
+        page = self.paginate_queryset(qs)
+        if page is not None:
+            serializer = ListingCommentReplySerializer(
+                page, many=True, context=self.get_serializer_context()
+            )
+            return self.get_paginated_response(serializer.data)
+        serializer = ListingCommentReplySerializer(
+            qs, many=True, context=self.get_serializer_context()
+        )
+        return Response(serializer.data)
 
 
 class SearchPagination(PageNumberPagination):
