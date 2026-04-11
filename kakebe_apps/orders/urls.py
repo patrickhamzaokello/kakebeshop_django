@@ -25,7 +25,8 @@ POST   /api/v1/orders/checkout/           - Place orders from cart
 POST   /api/v1/orders/{id}/confirm/       - Confirm order (merchant)
 POST   /api/v1/orders/{id}/complete/      - Complete order (merchant)
 POST   /api/v1/orders/{id}/update-status/ - Update order status (merchant)
-POST   /api/v1/orders/{id}/cancel/        - Cancel order (buyer)
+POST   /api/v1/orders/{id}/cancel/         - Cancel order (buyer)
+POST   /api/v1/orders/{id}/merchant-cancel/ - Cancel order (merchant)
 
 Order Groups:
 GET    /api/v1/orders/order-groups/              - List all order groups

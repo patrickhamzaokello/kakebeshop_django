@@ -371,8 +371,9 @@ class OrderIntentViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=['post'], url_path='cancel')
     def cancel(self, request, pk=None):
         """
-        Cancel order (buyer only)
-        Notification sent automatically via signal
+        Cancel order (buyer only).
+        POST /api/v1/orders/{id}/cancel/
+        Body: { "reason": "optional reason" }
         """
         order = self.get_object()
 
@@ -385,15 +386,59 @@ class OrderIntentViewSet(viewsets.ModelViewSet):
         if order.status in ['COMPLETED', 'CANCELLED']:
             return Response({
                 'success': False,
-                'error': f'Cannot cancel order with status {order.status}'
+                'error': f'Cannot cancel an order with status {order.status}'
             }, status=status.HTTP_400_BAD_REQUEST)
 
+        reason = request.data.get('reason', '').strip() or 'No reason provided'
         order.status = 'CANCELLED'
-        reason = request.data.get('reason', 'No reason provided')
         order.cancelled_by = 'BUYER'
         order.cancellation_reason = reason
         order.notes = f"Cancelled by buyer. Reason: {reason}"
-        order.save()  # Signal handles notification
+        order.save()  # signal handles notification
+
+        serializer = self.get_serializer(order)
+        return Response({
+            'success': True,
+            'message': 'Order cancelled successfully',
+            'data': serializer.data
+        })
+
+    @action(detail=True, methods=['post'], url_path='merchant-cancel')
+    def merchant_cancel(self, request, pk=None):
+        """
+        Merchant cancels a received order.
+        POST /api/v1/orders/{id}/merchant-cancel/
+        Body: { "reason": "required reason" }
+
+        Allowed from: NEW, CONTACTED, CONFIRMED.
+        Not allowed once the order is COMPLETED or already CANCELLED.
+        """
+        order = self.get_object()
+
+        if not hasattr(request.user, 'merchant_profile') or order.merchant != request.user.merchant_profile:
+            return Response({
+                'success': False,
+                'error': 'Only the merchant who received this order can cancel it'
+            }, status=status.HTTP_403_FORBIDDEN)
+
+        if order.status in ['COMPLETED', 'CANCELLED']:
+            return Response({
+                'success': False,
+                'error': f'Cannot cancel an order with status {order.status}'
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+        reason = request.data.get('reason', '').strip()
+        if not reason:
+            return Response({
+                'success': False,
+                'error': 'A cancellation reason is required'
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+        order.status = 'CANCELLED'
+        order.cancelled_by = 'MERCHANT'
+        order.cancellation_reason = reason
+        order.notes = f"Cancelled by merchant. Reason: {reason}"
+        order.save()  # signal handles notification
 
         serializer = self.get_serializer(order)
         return Response({
