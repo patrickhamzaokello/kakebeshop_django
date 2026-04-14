@@ -515,10 +515,6 @@ class OrderIntentItemAdmin(admin.ModelAdmin):
         """Prevent manual creation of order items"""
         return False
 
-    def has_delete_permission(self, request, obj=None):
-        """Prevent deletion of order items"""
-        return False
-
     def get_queryset(self, request):
         """Optimize queryset with prefetch"""
         queryset = super().get_queryset(request)
