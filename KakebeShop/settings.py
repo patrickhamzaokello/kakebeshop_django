@@ -17,6 +17,8 @@ SOCIAL_SECRET= config('SOCIAL_SECRET')
 WEB_GOOGLE_CLIENT_ID = config('WEB_GOOGLE_CLIENT_ID')
 IOS_GOOGLE_CLIENT_ID = config('IOS_GOOGLE_CLIENT_ID')
 ANDROID_GOOGLE_CLIENT_ID = config('ANDROID_GOOGLE_CLIENT_ID')
+ANDRIOD_KAKEBESHOP_DEV = config('ANDRIOD_KAKEBESHOP_DEV')
+ANDRIOD_KAKEBESHOP_PROD = config('ANDRIOD_KAKEBESHOP_PROD')
 
 TWILIO_ACCOUNT_SID = config('TWILIO_ACCOUNT_SID')
 TWILIO_AUTH_TOKEN = config('TWILIO_AUTH_TOKEN')
@@ -38,9 +40,11 @@ ALLOWED_HOSTS = [
 ]
 
 GOOGLE_CLIENT_IDS = [
-    WEB_GOOGLE_CLIENT_ID,  # Web client
-    IOS_GOOGLE_CLIENT_ID,     # iOS client
-    ANDROID_GOOGLE_CLIENT_ID, # Android client
+    WEB_GOOGLE_CLIENT_ID,       # Web / server client (type 3) — also used as Android serverClientId
+    IOS_GOOGLE_CLIENT_ID,       # iOS client (type 2)
+    ANDROID_GOOGLE_CLIENT_ID,   # Android client alias (currently same as web)
+    ANDRIOD_KAKEBESHOP_DEV,
+    ANDRIOD_KAKEBESHOP_PROD
 ]
 
 APPLE_CLIENT_ID = "com.kakebe.shop.dev"

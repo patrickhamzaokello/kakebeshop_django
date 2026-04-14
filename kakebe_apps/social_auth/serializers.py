@@ -56,20 +56,13 @@ class GoogleSocialAuthSerializer(serializers.Serializer):
     auth_token = serializers.CharField()
 
     def validate_auth_token(self, auth_token):
-        user_data = google.Google.validate(auth_token)
-        try:
-            user_data['sub']
-        except:
+        valid_client_ids = getattr(settings, 'GOOGLE_CLIENT_IDS', [])
+        user_data = google.Google.validate(auth_token, audiences=valid_client_ids)
+
+        if not isinstance(user_data, dict) or 'sub' not in user_data:
             raise serializers.ValidationError(
                 'The token is invalid or expired. Please login again.'
             )
-
-        valid_client_ids = getattr(settings, 'GOOGLE_CLIENT_IDS', [])
-
-        aud = user_data.get('aud')
-
-        if aud not in valid_client_ids:
-            raise AuthenticationFailed(f"Invalid client ID (audience): {aud}")
 
         user_id = user_data['sub']
         email = user_data['email']

@@ -1,0 +1,171 @@
+{
+  "project_info": {
+    "project_number": "587787462511",
+    "firebase_url": "https://kakebe-shop-lira-default-rtdb.firebaseio.com",
+    "project_id": "kakebe-shop-lira",
+    "storage_bucket": "kakebe-shop-lira.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:587787462511:android:7f4f2f07bb86bc0a4d2a9a",
+        "android_client_info": {
+          "package_name": "com.kakebe.shop"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "587787462511-vs1asn8h22ftf602f6cgv65uoi8agh27.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.kakebe.shop",
+            "certificate_hash": "87371ee43a638404dcb2874f72c14a3d6429f451"
+          }
+        },
+        {
+          "client_id": "587787462511-bqs4eiss15no6u37u6u6b4oqihrlcm7k.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDlyu12Irp9Ewr1-bgXWsebiA8mtH2wKgY"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "587787462511-bqs4eiss15no6u37u6u6b4oqihrlcm7k.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "587787462511-lqie16rbc77p418sfpodcdffse0o8o3b.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.kakebe.shop.dev"
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:587787462511:android:6466ee0a979bcb304d2a9a",
+        "android_client_info": {
+          "package_name": "com.kakebe.shop.dev"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "587787462511-6kmtrpvl2svjaov7oqs1duuv843f7049.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.kakebe.shop.dev",
+            "certificate_hash": "522113b192ce8fc084a42d5a426c94a97474dee0"
+          }
+        },
+        {
+          "client_id": "587787462511-bqs4eiss15no6u37u6u6b4oqihrlcm7k.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDlyu12Irp9Ewr1-bgXWsebiA8mtH2wKgY"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "587787462511-bqs4eiss15no6u37u6u6b4oqihrlcm7k.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "587787462511-lqie16rbc77p418sfpodcdffse0o8o3b.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.kakebe.shop.dev"
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:587787462511:android:cb4d2f714e5c76934d2a9a",
+        "android_client_info": {
+          "package_name": "com.kakebe.shop.preview"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "587787462511-bqs4eiss15no6u37u6u6b4oqihrlcm7k.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDlyu12Irp9Ewr1-bgXWsebiA8mtH2wKgY"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "587787462511-bqs4eiss15no6u37u6u6b4oqihrlcm7k.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "587787462511-lqie16rbc77p418sfpodcdffse0o8o3b.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.kakebe.shop.dev"
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:587787462511:android:6aec0d5aec37acc44d2a9a",
+        "android_client_info": {
+          "package_name": "com.shop.kakebe.KaKebe"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "587787462511-bqs4eiss15no6u37u6u6b4oqihrlcm7k.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDlyu12Irp9Ewr1-bgXWsebiA8mtH2wKgY"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "587787462511-bqs4eiss15no6u37u6u6b4oqihrlcm7k.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "587787462511-lqie16rbc77p418sfpodcdffse0o8o3b.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.kakebe.shop.dev"
+              }
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

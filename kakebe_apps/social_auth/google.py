@@ -6,19 +6,26 @@ class Google:
     """Google class to fetch the user info and return it"""
 
     @staticmethod
-    def validate(auth_token):
+    def validate(auth_token, audiences=None):
         """
-        validate method Queries the Google oAUTH2 api to fetch the user info
+        Verifies a Google ID token against one or more allowed audiences.
+        Tries each audience in turn; returns the token payload on the first
+        match, or an error string if none succeed.
         """
-        try:
-            idinfo = id_token.verify_oauth2_token(
-                auth_token, requests.Request())
+        if not audiences:
+            audiences = [None]  # fall back to no-audience check
 
-            # Ensure token is issued by Google
-            if idinfo['iss'] not in ['accounts.google.com', 'https://accounts.google.com']:
-                raise ValueError('Invalid issuer.')
+        for audience in audiences:
+            try:
+                idinfo = id_token.verify_oauth2_token(
+                    auth_token, requests.Request(), audience=audience)
 
-            return idinfo
+                if idinfo['iss'] not in ['accounts.google.com', 'https://accounts.google.com']:
+                    raise ValueError('Invalid issuer.')
 
-        except:
-            return "The token is either invalid or has expired"
+                return idinfo
+
+            except ValueError:
+                continue
+
+        return "The token is either invalid or has expired"
