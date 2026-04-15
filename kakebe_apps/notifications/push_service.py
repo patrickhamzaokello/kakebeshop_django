@@ -18,11 +18,13 @@ _NOTIFICATION_TYPE_MAP = {
     'ORDER_COMPLETED':        'order_update',
     'ORDER_CANCELLED':        'order_update',
     'MERCHANT_NEW_ORDER':     'new_order',
-    'MERCHANT_APPROVED':      'order_update',
-    'MERCHANT_DEACTIVATED':   'order_update',
-    'MERCHANT_SUSPENDED':     'order_update',
-    'LISTING_APPROVED':       'new_listing',
-    'LISTING_REJECTED':       'new_listing',
+    'MERCHANT_APPROVED':      'merchant_update',
+    'MERCHANT_REACTIVATED':   'merchant_update',
+    'MERCHANT_SUSPENDED':     'merchant_update',
+    'MERCHANT_BANNED':        'merchant_update',
+    'LISTING_SUBMITTED':      'listing_update',
+    'LISTING_APPROVED':       'listing_update',
+    'LISTING_REJECTED':       'listing_update',
 }
 
 

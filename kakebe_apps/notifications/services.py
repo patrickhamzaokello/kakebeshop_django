@@ -205,24 +205,42 @@ class NotificationService:
     ) -> Notification:
         """Create notification for merchant status changes"""
 
+        name = merchant.display_name or merchant.business_name or 'your account'
+
         notification_content = {
             NotificationType.MERCHANT_APPROVED: {
-                'title': 'Merchant Account Approved! 🎉',
-                'message': f'Congratulations! Your merchant account "{merchant.business_name}" has been approved. You can now start listing your products.',
+                'title': 'Merchant Account Approved',
+                'message': (
+                    f'Congratulations! Your merchant account "{name}" has been approved. '
+                    f'You can now start listing your products on Kakebe.'
+                ),
             },
-            NotificationType.MERCHANT_DEACTIVATED: {
-                'title': 'Merchant Account Deactivated',
-                'message': f'Your merchant account "{merchant.business_name}" has been deactivated. Please contact support for more information.',
+            NotificationType.MERCHANT_REACTIVATED: {
+                'title': 'Merchant Account Reactivated',
+                'message': (
+                    f'Good news! Your merchant account "{name}" has been reactivated. '
+                    f'You can resume selling on Kakebe.'
+                ),
             },
             NotificationType.MERCHANT_SUSPENDED: {
                 'title': 'Merchant Account Suspended',
-                'message': f'Your merchant account "{merchant.business_name}" has been temporarily suspended. Please contact support.',
+                'message': (
+                    f'Your merchant account "{name}" has been temporarily suspended. '
+                    f'Please contact support at support@kakebe.com for more information.'
+                ),
+            },
+            NotificationType.MERCHANT_BANNED: {
+                'title': 'Merchant Account Banned',
+                'message': (
+                    f'Your merchant account "{name}" has been permanently banned due to a '
+                    f'violation of our terms of service. Contact support@kakebe.com to appeal.'
+                ),
             },
         }
 
         content = notification_content.get(notification_type, {
             'title': 'Merchant Account Update',
-            'message': f'Your merchant account "{merchant.business_name}" has been updated.',
+            'message': f'Your merchant account "{name}" has been updated.',
         })
 
         metadata = {
@@ -238,6 +256,58 @@ class NotificationService:
             title=content['title'],
             message=content['message'],
             merchant_id=merchant.id,
+            metadata=metadata,
+        )
+
+    @staticmethod
+    def create_listing_notification(
+            merchant_user,
+            listing,
+            notification_type: str,
+    ) -> Notification:
+        """Create a notification for the merchant about one of their listings."""
+
+        title_map = {
+            NotificationType.LISTING_SUBMITTED: 'Listing Submitted for Review',
+            NotificationType.LISTING_APPROVED:  'Listing Approved',
+            NotificationType.LISTING_REJECTED:  'Listing Rejected',
+        }
+
+        message_map = {
+            NotificationType.LISTING_SUBMITTED: (
+                f'Your listing "{listing.title}" has been submitted and is under review. '
+                f'We will notify you once it has been approved.'
+            ),
+            NotificationType.LISTING_APPROVED: (
+                f'Great news! Your listing "{listing.title}" has been approved and is now '
+                f'live on Kakebe.'
+            ),
+            NotificationType.LISTING_REJECTED: (
+                f'Your listing "{listing.title}" was not approved.'
+                + (f' Reason: {listing.rejection_reason}' if listing.rejection_reason else
+                   f' Please contact support@kakebe.com for more information.')
+            ),
+        }
+
+        metadata = {
+            'listing_id': str(listing.id),
+            'listing_title': listing.title,
+            'listing_type': listing.listing_type,
+            'listing_status': listing.status,
+        }
+        if listing.rejection_reason:
+            metadata['rejection_reason'] = listing.rejection_reason
+
+        return NotificationService.create_notification(
+            user=merchant_user,
+            notification_type=notification_type,
+            title=title_map.get(notification_type, 'Listing Update'),
+            message=message_map.get(
+                notification_type,
+                f'Your listing "{listing.title}" has been updated.',
+            ),
+            merchant_id=listing.merchant_id,
+            listing_id=listing.id,
             metadata=metadata,
         )
 

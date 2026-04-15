@@ -390,11 +390,22 @@ class ListingService:
         if new_status not in ['DRAFT', 'PENDING']:
             raise ValueError(f"Invalid status: {new_status}")
 
-        updated = Listing.objects.filter(
+        listings = Listing.objects.filter(
             id__in=listing_ids,
             merchant=merchant,
-            deleted_at__isnull=True
-        ).update(status=new_status)
+            deleted_at__isnull=True,
+        ).exclude(status=new_status)
+
+        updated = 0
+        for listing in listings:
+            listing.status = new_status
+            if new_status == 'PENDING':
+                listing.is_verified = False
+                listing.verified_at = None
+                listing.save(update_fields=['status', 'is_verified', 'verified_at', 'updated_at'])
+            else:
+                listing.save(update_fields=['status', 'updated_at'])
+            updated += 1
 
         logger.info(
             f"Bulk status update: {updated} listings to {new_status}",

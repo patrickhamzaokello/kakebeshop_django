@@ -80,65 +80,119 @@ class MerchantAdmin(admin.ModelAdmin):
         'verify_merchants',
         'unverify_merchants',
         'activate_merchants',
+        'suspend_merchants',
+        'ban_merchants',
         'feature_merchants',
-        'unfeature_merchants'
+        'unfeature_merchants',
     ]
 
     def verify_merchants(self, request, queryset):
-        """Verify selected merchants"""
+        """Verify selected merchants and notify them via push/email."""
         from django.utils import timezone
-        updated = queryset.update(verified=True, verification_date=timezone.now())
+        updated = 0
+        for merchant in queryset.select_related('user'):
+            if not merchant.verified:
+                merchant.verified = True
+                merchant.verification_date = timezone.now()
+                # Save individual instance so pre_save/post_save signals fire
+                merchant.save(update_fields=['verified', 'verification_date', 'updated_at'])
+                updated += 1
         self.message_user(
             request,
-            f'{updated} merchant(s) verified successfully. They can now appear in the app.',
-            level='SUCCESS'
+            f'{updated} merchant(s) verified. Approval notifications sent.',
+            level='SUCCESS',
         )
 
-    verify_merchants.short_description = 'Verify selected merchants'
+    verify_merchants.short_description = 'Verify selected merchants (sends notification)'
 
     def unverify_merchants(self, request, queryset):
-        """Remove verification from selected merchants"""
-        updated = queryset.update(verified=False, verification_date=None)
+        """Remove verification from selected merchants."""
+        updated = 0
+        for merchant in queryset.select_related('user'):
+            if merchant.verified:
+                merchant.verified = False
+                merchant.verification_date = None
+                merchant.save(update_fields=['verified', 'verification_date', 'updated_at'])
+                updated += 1
         self.message_user(
             request,
             f'{updated} merchant(s) unverified. They will no longer appear in the app.',
-            level='WARNING'
+            level='WARNING',
         )
 
     unverify_merchants.short_description = 'Unverify selected merchants'
 
     def activate_merchants(self, request, queryset):
-        """Activate selected merchants"""
-        updated = queryset.update(status='ACTIVE')
-        self.message_user(request, f'{updated} merchant(s) activated.')
+        """Reactivate suspended or banned merchants and notify them."""
+        updated = 0
+        for merchant in queryset.select_related('user'):
+            if merchant.status != 'ACTIVE':
+                merchant.status = 'ACTIVE'
+                # Save individual instance so signals fire and notification is sent
+                merchant.save(update_fields=['status', 'updated_at'])
+                updated += 1
+        self.message_user(
+            request,
+            f'{updated} merchant(s) activated. Reactivation notifications sent.',
+        )
 
-    activate_merchants.short_description = 'Activate selected merchants'
+    activate_merchants.short_description = 'Activate selected merchants (sends notification)'
+
+    def suspend_merchants(self, request, queryset):
+        """Suspend selected merchants and notify them."""
+        updated = 0
+        for merchant in queryset.select_related('user'):
+            if merchant.status != 'SUSPENDED':
+                merchant.status = 'SUSPENDED'
+                merchant.save(update_fields=['status', 'updated_at'])
+                updated += 1
+        self.message_user(
+            request,
+            f'{updated} merchant(s) suspended. Suspension notifications sent.',
+            level='WARNING',
+        )
+
+    suspend_merchants.short_description = 'Suspend selected merchants (sends notification)'
+
+    def ban_merchants(self, request, queryset):
+        """Permanently ban selected merchants and notify them."""
+        updated = 0
+        for merchant in queryset.select_related('user'):
+            if merchant.status != 'BANNED':
+                merchant.status = 'BANNED'
+                merchant.save(update_fields=['status', 'updated_at'])
+                updated += 1
+        self.message_user(
+            request,
+            f'{updated} merchant(s) banned. Ban notifications sent.',
+            level='ERROR',
+        )
+
+    ban_merchants.short_description = 'Ban selected merchants (sends notification)'
 
     def feature_merchants(self, request, queryset):
-        """Mark selected merchants as featured"""
-        # Set featured to True for selected merchants
+        """Mark selected merchants as featured."""
         updated = 0
         for merchant in queryset:
             if not merchant.featured:
                 merchant.featured = True
-                merchant.save(update_fields=['featured'])
+                merchant.save(update_fields=['featured', 'updated_at'])
                 updated += 1
-
         self.message_user(
             request,
             f'{updated} merchant(s) marked as featured. They will appear on the homepage.',
-            level='SUCCESS'
+            level='SUCCESS',
         )
 
     feature_merchants.short_description = 'Mark as featured'
 
     def unfeature_merchants(self, request, queryset):
-        """Remove featured status from selected merchants"""
+        """Remove featured status from selected merchants."""
         updated = queryset.filter(featured=True).update(featured=False, featured_order=0)
         self.message_user(
             request,
             f'{updated} merchant(s) removed from featured list.',
-            level='INFO'
+            level='INFO',
         )
 
     unfeature_merchants.short_description = 'Remove from featured'

@@ -138,99 +138,117 @@ class ListingAdmin(admin.ModelAdmin):
     ]
 
     def verify_listings(self, request, queryset):
-        """Verify selected listings"""
-        updated = queryset.update(
-            is_verified=True,
-            verified_at=timezone.now()
-        )
+        """Verify selected listings and notify merchants."""
+        updated = 0
+        for listing in queryset.select_related('merchant__user'):
+            if not listing.is_verified:
+                listing.is_verified = True
+                listing.verified_at = timezone.now()
+                listing.save(update_fields=['is_verified', 'verified_at', 'updated_at'])
+                updated += 1
         self.message_user(
             request,
-            f'{updated} listing(s) verified successfully.',
-            level='SUCCESS'
+            f'{updated} listing(s) verified. Notifications sent to merchants.',
+            level='SUCCESS',
         )
 
-    verify_listings.short_description = 'Verify selected listings'
+    verify_listings.short_description = 'Verify selected listings (sends notification)'
 
     def unverify_listings(self, request, queryset):
-        """Remove verification from selected listings"""
-        updated = queryset.update(is_verified=False, verified_at=None)
+        """Remove verification from selected listings."""
+        updated = 0
+        for listing in queryset.select_related('merchant__user'):
+            if listing.is_verified:
+                listing.is_verified = False
+                listing.verified_at = None
+                listing.save(update_fields=['is_verified', 'verified_at', 'updated_at'])
+                updated += 1
         self.message_user(
             request,
             f'{updated} listing(s) unverified.',
-            level='WARNING'
+            level='WARNING',
         )
 
     unverify_listings.short_description = 'Unverify selected listings'
 
     def approve_listings(self, request, queryset):
-        """Approve and activate listings"""
-        updated = queryset.filter(
+        """Approve and activate listings, then notify their merchants."""
+        updated = 0
+        for listing in queryset.filter(
             status__in=['PENDING', 'DRAFT']
-        ).update(
-            status='ACTIVE',
-            is_verified=True,
-            verified_at=timezone.now()
-        )
+        ).select_related('merchant__user'):
+            listing.status = 'ACTIVE'
+            listing.is_verified = True
+            listing.verified_at = timezone.now()
+            listing.save(update_fields=['status', 'is_verified', 'verified_at', 'updated_at'])
+            updated += 1
         self.message_user(
             request,
-            f'{updated} listing(s) approved and activated.',
-            level='SUCCESS'
+            f'{updated} listing(s) approved and activated. Notifications sent to merchants.',
+            level='SUCCESS',
         )
 
-    approve_listings.short_description = 'Approve and activate listings'
+    approve_listings.short_description = 'Approve and activate listings (sends notification)'
 
     def reject_listings(self, request, queryset):
-        """Reject selected listings"""
-        updated = queryset.update(
-            status='REJECTED',
-            is_verified=False
-        )
+        """Reject selected listings and notify their merchants."""
+        updated = 0
+        for listing in queryset.select_related('merchant__user'):
+            if listing.status != 'REJECTED':
+                listing.status = 'REJECTED'
+                listing.is_verified = False
+                listing.save(update_fields=['status', 'is_verified', 'updated_at'])
+                updated += 1
         self.message_user(
             request,
-            f'{updated} listing(s) rejected. Please add rejection reasons manually.',
-            level='WARNING'
+            f'{updated} listing(s) rejected. Notifications sent. Add rejection reasons via the listing detail page.',
+            level='WARNING',
         )
 
-    reject_listings.short_description = 'Reject selected listings'
+    reject_listings.short_description = 'Reject selected listings (sends notification)'
 
     def feature_listings(self, request, queryset):
-        """Mark selected listings as featured"""
+        """Mark selected listings as featured."""
         updated = 0
         for listing in queryset.filter(is_verified=True, status='ACTIVE'):
             if not listing.is_featured:
                 listing.is_featured = True
-                listing.save(update_fields=['is_featured'])
+                listing.save(update_fields=['is_featured', 'updated_at'])
                 updated += 1
-
         self.message_user(
             request,
             f'{updated} listing(s) marked as featured.',
-            level='SUCCESS'
+            level='SUCCESS',
         )
 
     feature_listings.short_description = 'Mark as featured'
 
     def unfeature_listings(self, request, queryset):
-        """Remove featured status from selected listings"""
+        """Remove featured status from selected listings."""
         updated = queryset.filter(is_featured=True).update(
             is_featured=False,
-            featured_order=0
+            featured_order=0,
         )
         self.message_user(
             request,
             f'{updated} listing(s) removed from featured.',
-            level='INFO'
+            level='INFO',
         )
 
     unfeature_listings.short_description = 'Remove from featured'
 
     def close_listings(self, request, queryset):
-        """Close selected listings"""
-        updated = queryset.update(status='CLOSED')
+        """Close selected listings."""
+        updated = 0
+        for listing in queryset.select_related('merchant__user'):
+            if listing.status != 'CLOSED':
+                listing.status = 'CLOSED'
+                listing.save(update_fields=['status', 'updated_at'])
+                updated += 1
         self.message_user(
             request,
             f'{updated} listing(s) closed.',
-            level='INFO'
+            level='INFO',
         )
 
     close_listings.short_description = 'Close selected listings'

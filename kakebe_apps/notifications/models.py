@@ -15,9 +15,11 @@ class NotificationType(models.TextChoices):
 
     MERCHANT_NEW_ORDER = 'MERCHANT_NEW_ORDER', 'New Order Received'
     MERCHANT_APPROVED = 'MERCHANT_APPROVED', 'Merchant Account Approved'
-    MERCHANT_DEACTIVATED = 'MERCHANT_DEACTIVATED', 'Merchant Account Deactivated'
+    MERCHANT_REACTIVATED = 'MERCHANT_REACTIVATED', 'Merchant Account Reactivated'
     MERCHANT_SUSPENDED = 'MERCHANT_SUSPENDED', 'Merchant Account Suspended'
+    MERCHANT_BANNED = 'MERCHANT_BANNED', 'Merchant Account Banned'
 
+    LISTING_SUBMITTED = 'LISTING_SUBMITTED', 'Listing Submitted for Review'
     LISTING_APPROVED = 'LISTING_APPROVED', 'Listing Approved'
     LISTING_REJECTED = 'LISTING_REJECTED', 'Listing Rejected'
 

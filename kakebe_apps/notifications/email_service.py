@@ -22,7 +22,9 @@ class EmailNotificationService:
         NotificationType.ORDER_CANCELLED: 'emails/order_cancelled.html',
         NotificationType.MERCHANT_NEW_ORDER: 'emails/merchant_new_order.html',
         NotificationType.MERCHANT_APPROVED: 'emails/merchant_approved.html',
-        NotificationType.MERCHANT_DEACTIVATED: 'emails/merchant_deactivated.html',
+        NotificationType.MERCHANT_REACTIVATED: 'emails/merchant_approved.html',
+        NotificationType.MERCHANT_SUSPENDED: 'emails/merchant_suspended.html',
+        NotificationType.MERCHANT_BANNED: 'emails/merchant_suspended.html',
     }
 
     @classmethod
