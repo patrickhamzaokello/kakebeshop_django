@@ -59,15 +59,19 @@ class MerchantUpdateSerializer(serializers.ModelSerializer):
         ]
 
     def validate_business_email(self, value):
-        if value:
-            # Check if email is already used by another merchant
-            qs = Merchant.objects.filter(business_email=value)
-            if self.instance:
-                qs = qs.exclude(pk=self.instance.pk)
-            if qs.exists():
-                raise serializers.ValidationError(
-                    "This business email is already in use."
-                )
+        # Normalize empty string to None so the unique constraint allows
+        # multiple merchants without a business email (NULL != NULL in SQL)
+        if not value or not value.strip():
+            return None
+        value = value.strip()
+        # Check if email is already used by another merchant
+        qs = Merchant.objects.filter(business_email=value)
+        if self.instance:
+            qs = qs.exclude(pk=self.instance.pk)
+        if qs.exists():
+            raise serializers.ValidationError(
+                "This business email is already in use by another merchant."
+            )
         return value
 
     def validate_display_name(self, value):
@@ -94,9 +98,14 @@ class MerchantCreateSerializer(serializers.ModelSerializer):
         ]
 
     def validate_business_email(self, value):
-        if value and Merchant.objects.filter(business_email=value).exists():
+        # Normalize empty string to None so the unique constraint allows
+        # multiple merchants without a business email (NULL != NULL in SQL)
+        if not value or not value.strip():
+            return None
+        value = value.strip()
+        if Merchant.objects.filter(business_email=value).exists():
             raise serializers.ValidationError(
-                "This business email is already in use."
+                "This business email is already in use by another merchant."
             )
         return value
 

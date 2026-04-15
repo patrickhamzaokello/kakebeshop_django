@@ -88,6 +88,14 @@ class Merchant(models.Model):
                 and self.deleted_at is None
         )
 
+    def save(self, *args, **kwargs):
+        # Ensure empty string business_email is stored as NULL so that the
+        # unique constraint (which ignores NULLs) doesn't fire for merchants
+        # that simply haven't set a business email yet.
+        if self.business_email == "":
+            self.business_email = None
+        super().save(*args, **kwargs)
+
     def soft_delete(self):
         """Soft delete the merchant"""
         from django.utils import timezone

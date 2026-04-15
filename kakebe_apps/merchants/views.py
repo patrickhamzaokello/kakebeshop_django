@@ -6,6 +6,7 @@ from rest_framework.response import Response
 from rest_framework.pagination import PageNumberPagination
 from django.shortcuts import get_object_or_404
 from django.db.models import Q
+from django.db import IntegrityError
 from .models import Merchant
 from .serializers import (
     MerchantListSerializer,
@@ -226,7 +227,13 @@ class MerchantViewSet(viewsets.ViewSet):
             context={'request': request}
         )
         serializer.is_valid(raise_exception=True)
-        serializer.save()
+        try:
+            serializer.save()
+        except IntegrityError:
+            return Response(
+                {'business_email': ['This business email is already in use by another merchant.']},
+                status=status.HTTP_400_BAD_REQUEST
+            )
 
         # Return full detail serializer
         return Response(
@@ -241,7 +248,13 @@ class MerchantViewSet(viewsets.ViewSet):
             context={'request': request}
         )
         serializer.is_valid(raise_exception=True)
-        merchant = serializer.save()
+        try:
+            merchant = serializer.save()
+        except IntegrityError:
+            return Response(
+                {'business_email': ['This business email is already in use by another merchant.']},
+                status=status.HTTP_400_BAD_REQUEST
+            )
 
         return Response(
             MerchantDetailSerializer(merchant, context={'request': request}).data,
