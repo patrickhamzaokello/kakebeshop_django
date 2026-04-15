@@ -115,7 +115,8 @@ LOCAL_APPS = [
     'kakebe_apps.promotions',
     'kakebe_apps.transactions',
     'kakebe_apps.notifications',
-    'kakebe_apps.imagehandler'
+    'kakebe_apps.imagehandler',
+    'kakebe_apps.admin_dashboard',
 ]
 
 INSTALLED_APPS = DJANGO_APPS + THIRD_PARTY_APPS + LOCAL_APPS

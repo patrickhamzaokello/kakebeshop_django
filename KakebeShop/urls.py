@@ -63,6 +63,8 @@ urlpatterns = [
 
         path('image/', include('kakebe_apps.imagehandler.urls')),
 
+        path('admin/', include('kakebe_apps.admin_dashboard.urls')),
+
     ])),
 
 
