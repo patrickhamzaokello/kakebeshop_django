@@ -1,9 +1,5 @@
-from django.contrib.auth import authenticate
 from kakebe_apps.authentication.models import User
-import random
 from rest_framework.exceptions import AuthenticationFailed
-from django.conf import settings
-
 
 
 def register_social_user(provider, user_id, email, name):
@@ -11,21 +7,28 @@ def register_social_user(provider, user_id, email, name):
     Register or retrieve a user for social authentication.
     Returns user data with tokens.
     """
-    # Check if user exists with the given email and provider
-    existing_user = User.objects.filter(email=email, auth_provider=provider).first()
+    # Check if the email is already registered under a different provider
+    email_user = User.objects.filter(email=email).first()
+    if email_user and email_user.auth_provider != provider:
+        raise AuthenticationFailed(
+            f'This email is already registered with {email_user.auth_provider}. '
+            f'Please login using {email_user.auth_provider}.'
+        )
 
-    if existing_user:
-        if not existing_user.is_active:
-            raise AuthenticationFailed('Account disabled, contact admin')
-        if not existing_user.is_verified:
-            raise AuthenticationFailed('Email is not verified')
-        # Generate tokens for existing user
+    if email_user:
+        # Existing user with the same provider
+        if not email_user.is_active:
+            raise AuthenticationFailed('Your account has been disabled. Please contact support.')
+        if not email_user.is_verified:
+            raise AuthenticationFailed(
+                'Your email is not verified. Please check your email for the verification code.'
+            )
         return {
-            'email': existing_user.email,
-            'name': existing_user.name,
-            'username': existing_user.username,
-            'user_id': existing_user.id,
-            'tokens': existing_user.tokens()
+            'email': email_user.email,
+            'name': email_user.name,
+            'username': email_user.username,
+            'user_id': str(email_user.id),
+            'tokens': email_user.tokens()
         }
 
     # Create new user
@@ -36,15 +39,15 @@ def register_social_user(provider, user_id, email, name):
             password=None  # Social users don't need a password
         )
         user.auth_provider = provider
-        user.is_verified = True  # Social auth typically verifies email
+        user.is_verified = True  # Social auth verifies email
         user.save()
 
         return {
             'email': user.email,
             'name': user.name,
             'username': user.username,
-            'user_id': user.id,
+            'user_id': str(user.id),
             'tokens': user.tokens()
         }
     except Exception as e:
-        raise AuthenticationFailed(f"Failed to create user: {str(e)}")
+        raise AuthenticationFailed('Failed to create account. Please try again.')

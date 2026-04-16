@@ -16,23 +16,24 @@ class FacebookSocialAuthSerializer(serializers.Serializer):
             user_id = user_data['id']
             email = user_data['email']
             name = user_data['name']
-            provider = 'facebook'
-            return register_social_user(
-                provider=provider,
-                user_id=user_id,
-                email=email,
-                name=name
-            )
-        except Exception as identifier:
-
+        except (KeyError, TypeError):
             raise serializers.ValidationError(
-                'The token  is invalid or expired. Please login again.'
+                'The token is invalid or expired. Please login again.'
             )
+
+        # Let AuthenticationFailed propagate — views handle it separately
+        return register_social_user(
+            provider='facebook',
+            user_id=user_id,
+            email=email,
+            name=name
+        )
+
 
 class AppleSocialAuthSerializer(serializers.Serializer):
     auth_token = serializers.CharField()
-    @staticmethod
-    def validate_auth_token(auth_token):
+
+    def validate_auth_token(self, auth_token):
         try:
             user_data = apple.Apple.validate(auth_token)
         except ValueError as e:
@@ -41,15 +42,15 @@ class AppleSocialAuthSerializer(serializers.Serializer):
         aud = user_data.get('aud')
         valid_client_ids = getattr(settings, 'APPLE_CLIENT_IDS', [])
         if aud not in valid_client_ids:
-            raise AuthenticationFailed(f"Invalid Apple client ID (aud): {aud}")
+            raise serializers.ValidationError('Invalid Apple client ID. Please try again.')
 
+        # Let AuthenticationFailed propagate — views handle it separately
         return register_social_user(
             provider='apple',
             user_id=user_data['sub'],
             email=user_data.get('email'),
             name=user_data.get('name', 'Apple User'),
         )
-
 
 
 class GoogleSocialAuthSerializer(serializers.Serializer):
@@ -64,13 +65,13 @@ class GoogleSocialAuthSerializer(serializers.Serializer):
                 'The token is invalid or expired. Please login again.'
             )
 
-        user_id = user_data['sub']
-        email = user_data['email']
-        name = user_data['name']
-        provider = 'google'
-
+        # Let AuthenticationFailed propagate — views handle it separately
         return register_social_user(
-            provider=provider, user_id=user_id, email=email, name=name)
+            provider='google',
+            user_id=user_data['sub'],
+            email=user_data['email'],
+            name=user_data['name'],
+        )
 
 
 class TwitterAuthSerializer(serializers.Serializer):
@@ -79,7 +80,6 @@ class TwitterAuthSerializer(serializers.Serializer):
     access_token_secret = serializers.CharField()
 
     def validate(self, attrs):
-
         access_token_key = attrs.get('access_token_key')
         access_token_secret = attrs.get('access_token_secret')
 
@@ -90,11 +90,15 @@ class TwitterAuthSerializer(serializers.Serializer):
             user_id = user_info['id_str']
             email = user_info['email']
             name = user_info['name']
-            provider = 'twitter'
-        except:
+        except (KeyError, TypeError):
             raise serializers.ValidationError(
                 'The tokens are invalid or expired. Please login again.'
             )
 
+        # Let AuthenticationFailed propagate — views handle it separately
         return register_social_user(
-            provider=provider, user_id=user_id, email=email, name=name)
+            provider='twitter',
+            user_id=user_id,
+            email=email,
+            name=name,
+        )
