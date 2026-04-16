@@ -11,6 +11,7 @@ from .serializers import (
     GoogleSocialAuthSerializer,
     TwitterAuthSerializer,
 )
+from kakebe_apps.analytics import events as analytics
 
 logger = logging.getLogger(__name__)
 
@@ -49,7 +50,9 @@ class GoogleSocialAuthView(GenericAPIView):
         try:
             serializer = self.serializer_class(data=request.data)
             serializer.is_valid(raise_exception=True)
-            return Response(serializer.validated_data['auth_token'], status=status.HTTP_200_OK)
+            data = serializer.validated_data['auth_token']
+            analytics.user_logged_in_social(data.get('user_id'), 'google')
+            return Response(data, status=status.HTTP_200_OK)
         except (AuthenticationFailed, ValidationError) as e:
             return _handle_social_auth_error(e)
         except Exception as e:
@@ -64,7 +67,9 @@ class AppleSocialAuthView(GenericAPIView):
         try:
             serializer = self.serializer_class(data=request.data)
             serializer.is_valid(raise_exception=True)
-            return Response(serializer.validated_data['auth_token'], status=status.HTTP_200_OK)
+            data = serializer.validated_data['auth_token']
+            analytics.user_logged_in_social(data.get('user_id'), 'apple')
+            return Response(data, status=status.HTTP_200_OK)
         except (AuthenticationFailed, ValidationError) as e:
             return _handle_social_auth_error(e)
         except Exception as e:
@@ -79,7 +84,9 @@ class FacebookSocialAuthView(GenericAPIView):
         try:
             serializer = self.serializer_class(data=request.data)
             serializer.is_valid(raise_exception=True)
-            return Response(serializer.validated_data['auth_token'], status=status.HTTP_200_OK)
+            data = serializer.validated_data['auth_token']
+            analytics.user_logged_in_social(data.get('user_id'), 'facebook')
+            return Response(data, status=status.HTTP_200_OK)
         except (AuthenticationFailed, ValidationError) as e:
             return _handle_social_auth_error(e)
         except Exception as e:
@@ -94,7 +101,9 @@ class TwitterSocialAuthView(GenericAPIView):
         try:
             serializer = self.serializer_class(data=request.data)
             serializer.is_valid(raise_exception=True)
-            return Response(serializer.validated_data, status=status.HTTP_200_OK)
+            data = serializer.validated_data
+            analytics.user_logged_in_social(data.get('user_id'), 'twitter')
+            return Response(data, status=status.HTTP_200_OK)
         except (AuthenticationFailed, ValidationError) as e:
             return _handle_social_auth_error(e)
         except Exception as e:

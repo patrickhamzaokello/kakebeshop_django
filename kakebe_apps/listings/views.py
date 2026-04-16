@@ -24,6 +24,7 @@ from .serializers import (
     MyListingSerializer,
 )
 from .services import ListingService
+from kakebe_apps.analytics import events as analytics
 
 from kakebe_apps.imagehandler.serializers import (
     ListingImageUploadSerializer,
@@ -465,6 +466,7 @@ class ListingViewSet(viewsets.ViewSet):
                     'listing_id': str(listing.id)
                 }
             )
+            analytics.listing_created(request.user.id, listing)
             return Response(
                 ListingDetailSerializer(listing, context={'request': request}).data,
                 status=status.HTTP_201_CREATED

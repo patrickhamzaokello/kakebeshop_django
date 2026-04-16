@@ -17,7 +17,9 @@
       "Bash(xargs ls:*)",
       "Bash(grep -r \"prefetch_related\\\\|select_related\" /c/Users/pkase/PycharmProjects/KakebeShop/kakebe_apps/orders/*.py)",
       "Bash(.venv/Scripts/python.exe -c ' *)",
-      "Bash(.venv/Scripts/python.exe manage.py show_urls)"
+      "Bash(.venv/Scripts/python.exe manage.py show_urls)",
+      "Bash(.venv/Scripts/pip install *)",
+      "Bash(.venv/Scripts/pip show *)"
     ]
   }
 }

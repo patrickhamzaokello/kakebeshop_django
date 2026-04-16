@@ -1,12 +1,16 @@
 
 import datetime
+import logging
 import os
 from pathlib import Path
-import environ
-import os
-from decouple import config, Csv
 
-from pathlib import Path
+import environ
+import sentry_sdk
+from decouple import config, Csv
+from sentry_sdk.integrations.celery import CeleryIntegration
+from sentry_sdk.integrations.django import DjangoIntegration
+from sentry_sdk.integrations.logging import LoggingIntegration
+from sentry_sdk.integrations.redis import RedisIntegration
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
@@ -117,6 +121,7 @@ LOCAL_APPS = [
     'kakebe_apps.notifications',
     'kakebe_apps.imagehandler',
     'kakebe_apps.admin_dashboard',
+    'kakebe_apps.analytics',
 ]
 
 INSTALLED_APPS = DJANGO_APPS + THIRD_PARTY_APPS + LOCAL_APPS
@@ -143,6 +148,8 @@ MIDDLEWARE = [
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
+    # Analytics — must come after AuthenticationMiddleware
+    'kakebe_apps.analytics.middleware.PostHogIdentifyMiddleware',
 ]
 
 ROOT_URLCONF = 'KakebeShop.urls'
@@ -357,6 +364,71 @@ CACHES = {
         }
     }
 }
+
+# ============================================================================
+# POSTHOG — product analytics
+# ============================================================================
+
+POSTHOG_API_KEY = config('POSTHOG_API_KEY', default='')
+POSTHOG_HOST = config('POSTHOG_HOST', default='https://us.i.posthog.com')
+# Set to False in tests or when you don't want events sent
+POSTHOG_ENABLED = config('POSTHOG_ENABLED', default=True, cast=bool)
+
+
+# ============================================================================
+# SENTRY — error tracking, performance monitoring, Celery & uptime
+# ============================================================================
+
+_SENTRY_SCRUBBED_KEYS = frozenset({
+    'password', 'token', 'access_token', 'refresh', 'auth_token',
+    'authorization', 'secret', 'api_key', 'private_key',
+})
+
+
+def _sentry_before_send(event, hint):
+    """Strip sensitive fields from request bodies before sending to Sentry."""
+    try:
+        request_data = event.get('request', {}).get('data', {})
+        if isinstance(request_data, dict):
+            for key in list(request_data):
+                if key.lower() in _SENTRY_SCRUBBED_KEYS:
+                    request_data[key] = '[Filtered]'
+    except Exception:
+        pass
+    return event
+
+
+SENTRY_DSN = config('SENTRY_DSN', default='')
+SENTRY_ENVIRONMENT = config('ENVIRONMENT', default='development')
+SENTRY_TRACES_SAMPLE_RATE = config('SENTRY_TRACES_SAMPLE_RATE', default=0.1, cast=float)
+SENTRY_PROFILES_SAMPLE_RATE = config('SENTRY_PROFILES_SAMPLE_RATE', default=0.1, cast=float)
+
+if SENTRY_DSN:
+    sentry_sdk.init(
+        dsn=SENTRY_DSN,
+        environment=SENTRY_ENVIRONMENT,
+        integrations=[
+            DjangoIntegration(
+                transaction_style='url',   # group by URL pattern, not full path
+                middleware_spans=True,
+                signals_spans=False,       # skip Django signal spans (too noisy)
+                cache_spans=True,          # track Redis cache hits/misses
+            ),
+            CeleryIntegration(
+                monitor_beat_tasks=True,   # report beat task failures as Sentry issues
+            ),
+            RedisIntegration(),
+            LoggingIntegration(
+                level=logging.INFO,        # breadcrumbs from INFO+
+                event_level=logging.ERROR, # Sentry events from ERROR+
+            ),
+        ],
+        traces_sample_rate=SENTRY_TRACES_SAMPLE_RATE,
+        profiles_sample_rate=SENTRY_PROFILES_SAMPLE_RATE,
+        send_default_pii=False,
+        before_send=_sentry_before_send,
+    )
+
 
 LOGGING = {
     'version': 1,

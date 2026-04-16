@@ -15,6 +15,7 @@ from .serializers import (
     MerchantCreateSerializer,
     MerchantImageUpdateSerializer
 )
+from kakebe_apps.analytics import events as analytics
 
 
 class MerchantPagination(PageNumberPagination):
@@ -256,6 +257,7 @@ class MerchantViewSet(viewsets.ViewSet):
                 status=status.HTTP_400_BAD_REQUEST
             )
 
+        analytics.merchant_profile_created(request.user.id, merchant)
         return Response(
             MerchantDetailSerializer(merchant, context={'request': request}).data,
             status=status.HTTP_201_CREATED

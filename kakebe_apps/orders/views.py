@@ -10,6 +10,7 @@ from django.conf import settings
 from django.db.models import Q
 
 from .models import OrderIntent, OrderIntentItem, OrderGroup
+from kakebe_apps.analytics import events as analytics
 from .serializers import (
     OrderIntentSerializer,
     OrderGroupSerializer,
@@ -235,6 +236,8 @@ class OrderIntentViewSet(viewsets.ModelViewSet):
                     order_group.save(update_fields=['total_amount'])
 
                 cart.clear_cart()
+
+            analytics.order_placed(user.id, orders, total_group_amount, order_group)
 
             order_ids = [o.id for o in orders]
             orders_with_items = list(

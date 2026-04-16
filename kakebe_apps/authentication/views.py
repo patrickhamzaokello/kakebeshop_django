@@ -33,6 +33,7 @@ import string
 import logging
 
 from ..engagement.serializers import UserProfileSerializer
+from kakebe_apps.analytics import events as analytics
 
 logger = logging.getLogger(__name__)
 
@@ -82,6 +83,8 @@ class RegisterView(generics.GenericAPIView):
                 user.name,
                 verification_code,
             )
+
+            analytics.user_registered(user)
 
             # Success response
             return Response({
@@ -181,6 +184,8 @@ class VerifyEmailAPIView(views.APIView):
 
             # Clear cache
             cache.delete(cache_key)
+
+            analytics.email_verified(user)
 
             # Dispatch welcome email in the background
             send_welcome_email_task.delay(user.email, user.name, user.username)
@@ -285,6 +290,7 @@ class LoginAPIView(generics.GenericAPIView):
         try:
             serializer = self.serializer_class(data=request.data, context={'request': request})
             serializer.is_valid(raise_exception=True)
+            analytics.user_logged_in(serializer.context['user'])
             return Response(serializer.data, status=status.HTTP_200_OK)
 
         except ValidationError as e:
@@ -484,6 +490,7 @@ class LogoutAPIView(generics.GenericAPIView):
             serializer = self.get_serializer(data=request.data)
             serializer.is_valid(raise_exception=True)
             serializer.save()
+            analytics.user_logged_out(request.user.id)
             return Response({
                 "success": True,
                 "message": "Successfully logged out"
