@@ -51,7 +51,12 @@ class GoogleSocialAuthView(GenericAPIView):
             serializer = self.serializer_class(data=request.data)
             serializer.is_valid(raise_exception=True)
             data = serializer.validated_data['auth_token']
-            analytics.user_logged_in_social(data.get('user_id'), 'google')
+            is_new_user = data.pop('is_new_user', False)
+            analytics.user_logged_in_social(
+                data.get('user_id'), 'google',
+                is_new_user=is_new_user,
+                email=data.get('email'), name=data.get('name'), username=data.get('username'),
+            )
             return Response(data, status=status.HTTP_200_OK)
         except (AuthenticationFailed, ValidationError) as e:
             return _handle_social_auth_error(e)
@@ -68,7 +73,12 @@ class AppleSocialAuthView(GenericAPIView):
             serializer = self.serializer_class(data=request.data)
             serializer.is_valid(raise_exception=True)
             data = serializer.validated_data['auth_token']
-            analytics.user_logged_in_social(data.get('user_id'), 'apple')
+            is_new_user = data.pop('is_new_user', False)
+            analytics.user_logged_in_social(
+                data.get('user_id'), 'apple',
+                is_new_user=is_new_user,
+                email=data.get('email'), name=data.get('name'), username=data.get('username'),
+            )
             return Response(data, status=status.HTTP_200_OK)
         except (AuthenticationFailed, ValidationError) as e:
             return _handle_social_auth_error(e)
@@ -85,7 +95,12 @@ class FacebookSocialAuthView(GenericAPIView):
             serializer = self.serializer_class(data=request.data)
             serializer.is_valid(raise_exception=True)
             data = serializer.validated_data['auth_token']
-            analytics.user_logged_in_social(data.get('user_id'), 'facebook')
+            is_new_user = data.pop('is_new_user', False)
+            analytics.user_logged_in_social(
+                data.get('user_id'), 'facebook',
+                is_new_user=is_new_user,
+                email=data.get('email'), name=data.get('name'), username=data.get('username'),
+            )
             return Response(data, status=status.HTTP_200_OK)
         except (AuthenticationFailed, ValidationError) as e:
             return _handle_social_auth_error(e)
@@ -102,7 +117,12 @@ class TwitterSocialAuthView(GenericAPIView):
             serializer = self.serializer_class(data=request.data)
             serializer.is_valid(raise_exception=True)
             data = serializer.validated_data
-            analytics.user_logged_in_social(data.get('user_id'), 'twitter')
+            is_new_user = data.pop('is_new_user', False)
+            analytics.user_logged_in_social(
+                data.get('user_id'), 'twitter',
+                is_new_user=is_new_user,
+                email=data.get('email'), name=data.get('name'), username=data.get('username'),
+            )
             return Response(data, status=status.HTTP_200_OK)
         except (AuthenticationFailed, ValidationError) as e:
             return _handle_social_auth_error(e)

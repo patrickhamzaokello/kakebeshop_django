@@ -19,6 +19,8 @@ from .tasks import (
 )
 from rest_framework.response import Response
 from rest_framework_simplejwt.tokens import RefreshToken
+from rest_framework_simplejwt.views import TokenRefreshView
+from rest_framework_simplejwt.exceptions import TokenError, InvalidToken
 from .models import User
 from .twilio_utils import TwilioVerification
 from django.contrib.auth.tokens import default_token_generator
@@ -841,6 +843,27 @@ class UpdateProfileImageView(views.APIView):
                 "error": "Failed to update profile image",
                 "message": "Please try again later"
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+class AnalyticsTokenRefreshView(TokenRefreshView):
+    """
+    Wraps SimpleJWT's TokenRefreshView to call PostHog identify on every
+    successful refresh, keeping returning users tracked across sessions.
+    """
+
+    def post(self, request, *args, **kwargs):
+        response = super().post(request, *args, **kwargs)
+        if response.status_code == 200:
+            try:
+                raw_token = request.data.get('refresh', '')
+                refresh = RefreshToken(raw_token)
+                user_id = refresh.payload.get('user_id')
+                if user_id:
+                    user = User.objects.filter(pk=user_id).first()
+                    analytics.session_resumed(user_id, user)
+            except (TokenError, InvalidToken, Exception):
+                pass  # Never block a refresh for analytics
+        return response
+
 
 class UserProfileView(generics.RetrieveUpdateAPIView):
     """

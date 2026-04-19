@@ -65,9 +65,27 @@ def user_registered(user) -> None:
 
 
 def user_logged_in(user, auth_provider: str = 'email') -> None:
+    identify(user.id, {
+        'email': user.email,
+        'name': user.name,
+        'username': user.username,
+        'auth_provider': getattr(user, 'auth_provider', auth_provider),
+    })
     capture(user.id, 'user_logged_in', {
         'auth_provider': auth_provider,
     })
+
+
+def session_resumed(user_id, user=None) -> None:
+    """Called on token refresh — re-identifies the user so PostHog keeps the session live."""
+    props = {}
+    if user:
+        props = {
+            'email': user.email,
+            'name': user.name,
+            'username': user.username,
+        }
+    identify(user_id, props)
 
 
 def email_verified(user) -> None:
@@ -81,10 +99,22 @@ def user_logged_out(user_id) -> None:
     capture(user_id, 'user_logged_out')
 
 
-def user_logged_in_social(user_id, provider: str) -> None:
+def user_logged_in_social(user_id, provider: str, is_new_user: bool = False,
+                           email: str = None, name: str = None, username: str = None) -> None:
     """Called after successful social auth (Google / Apple / Facebook / Twitter)."""
     if not user_id:
         return
+    if is_new_user:
+        identify(user_id, {
+            'email': email,
+            'name': name,
+            'username': username,
+            'auth_provider': provider,
+        })
+        capture(user_id, 'user_registered', {
+            'auth_provider': provider,
+            'email_domain': email.split('@')[-1] if email else None,
+        })
     capture(user_id, 'user_logged_in', {'auth_provider': provider})
 
 
@@ -112,10 +142,22 @@ def listing_created(user_id, listing) -> None:
 
 # ── Orders ────────────────────────────────────────────────────────────────────
 
-def order_placed(user_id, orders: list, total_amount, order_group=None) -> None:
-    capture(user_id, 'order_placed', {
-        'order_count': len(orders),
-        'order_ids': [str(o.id) for o in orders],
-        'order_group_id': str(order_group.id) if order_group else None,
-        'total_amount': float(total_amount),
-    })
+def order_placed(user_id, orders: list, total_amount, order_group=None, currency: str = None) -> None:
+    if not _enabled() or not user_id:
+        return
+    try:
+        from django.conf import settings as _settings
+        _currency = currency or getattr(_settings, 'DEFAULT_CURRENCY', 'UGX')
+        merchant_ids = list({str(o.merchant_id) for o in orders})
+        listing_ids = [str(item.listing_id) for o in orders for item in o.items.all()]
+        capture(user_id, 'order_placed', {
+            'order_count': len(orders),
+            'order_ids': [str(o.id) for o in orders],
+            'order_group_id': str(order_group.id) if order_group else None,
+            'total_amount': float(total_amount),
+            'currency': _currency,
+            'merchant_ids': merchant_ids,
+            'listing_ids': listing_ids,
+        })
+    except Exception as exc:
+        logger.warning('PostHog order_placed failed: %s', exc)

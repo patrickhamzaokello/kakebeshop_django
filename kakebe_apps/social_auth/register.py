@@ -28,7 +28,8 @@ def register_social_user(provider, user_id, email, name):
             'name': email_user.name,
             'username': email_user.username,
             'user_id': str(email_user.id),
-            'tokens': email_user.tokens()
+            'tokens': email_user.tokens(),
+            'is_new_user': False,
         }
 
     # Create new user
@@ -47,7 +48,8 @@ def register_social_user(provider, user_id, email, name):
             'name': user.name,
             'username': user.username,
             'user_id': str(user.id),
-            'tokens': user.tokens()
+            'tokens': user.tokens(),
+            'is_new_user': True,
         }
     except Exception as e:
         raise AuthenticationFailed('Failed to create account. Please try again.')

@@ -2,17 +2,15 @@ from django.urls import path
 from .views import RegisterView, LogoutAPIView, SetNewPasswordAPIView, LoginAPIView, \
     RequestPasswordResetEmail, VerifyResetCodeAPIView, VerifyEmailAPIView, ResendVerificationCodeAPIView, \
     AddPhoneNumberView, VerifyPhoneNumberView, ResendPhoneVerificationView, UpdatePhoneNumberView, \
-    RemovePhoneNumberView, GetPhoneStatusView, UserProfileView, UpdateProfileImageView
-from rest_framework_simplejwt.views import (
-    TokenRefreshView,
-)
+    RemovePhoneNumberView, GetPhoneStatusView, UserProfileView, UpdateProfileImageView, \
+    AnalyticsTokenRefreshView
 
 
 urlpatterns = [
 
     path('login/', LoginAPIView.as_view(), name="login"),
     path('logout/', LogoutAPIView.as_view(), name="logout"),
-    path('token/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
+    path('token/refresh/', AnalyticsTokenRefreshView.as_view(), name='token_refresh'),
 
     ##### Registration and Email Verification
     path('register/', RegisterView.as_view(), name="register"),
