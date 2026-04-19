@@ -10,8 +10,8 @@ What it does:
   - Prints the outcome for each
 
 After running, check:
-  - PostHog  → app.posthog.com  → Activity feed → look for distinct_id "verify-script"
-  - Sentry   → your project     → Issues         → look for "KakebeShop verification"
+  - PostHog  > app.posthog.com  > Activity feed > look for distinct_id "verify-script"
+  - Sentry   > your project     > Issues         > look for "KakebeShop verification"
 """
 
 import os
@@ -62,7 +62,7 @@ def verify_posthog():
         return False
 
     print(f'[PostHog] OK    — event sent to {posthog.host}')
-    print(f'           ↳  Check PostHog → Activity → distinct_id "verify-script"')
+    print(f'           ->  Check PostHog > Activity > distinct_id "verify-script"')
     return True
 
 
@@ -92,7 +92,7 @@ def verify_sentry():
 
     if event_id:
         print(f'[Sentry]  OK    — event_id={event_id}')
-        print(f'           ↳  Check Sentry → Issues → "KakebeShop verification"')
+        print(f'           ->  Check Sentry > Issues > "KakebeShop verification"')
         return True
     else:
         print('[Sentry]  FAIL  — capture returned no event_id (DSN may be wrong)')
