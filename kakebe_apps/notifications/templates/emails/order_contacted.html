@@ -1,0 +1,35 @@
+<!-- kakebe_apps/notifications/templates/emails/order_contacted.html -->
+{% extends "emails/base.html" %}
+
+{% block content %}
+<h2>Merchant Has Contacted You</h2>
+
+<p>Hi {{ user.name|default:user.email }},</p>
+
+<p>Great news! The merchant has reached out regarding your order. Please check your messages and respond at your earliest convenience.</p>
+
+<div class="info-box">
+    <div class="info-row">
+        <span class="info-label">Order Number</span>
+        <span class="info-value">{{ metadata.order_number }}</span>
+    </div>
+    {% if metadata.merchant_name %}
+    <div class="info-row">
+        <span class="info-label">Merchant</span>
+        <span class="info-value">{{ metadata.merchant_name }}</span>
+    </div>
+    {% endif %}
+    <div class="info-row">
+        <span class="info-label">Total Amount</span>
+        <span class="info-value">UGX {{ metadata.total_amount }}</span>
+    </div>
+</div>
+
+<a href="{{ site_url }}/orders/{{ metadata.order_number }}" class="button">
+    View Order Details
+</a>
+
+<p style="font-size: 13px; color: #999; margin-top: 30px;">
+    If you have any questions, please contact our support team.
+</p>
+{% endblock %}

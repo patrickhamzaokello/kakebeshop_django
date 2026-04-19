@@ -1,0 +1,42 @@
+<!-- kakebe_apps/notifications/templates/emails/order_completed.html -->
+{% extends "emails/base.html" %}
+
+{% block content %}
+<h2>Order Delivered! 🎉</h2>
+
+<p>Hi {{ user.name|default:user.email }},</p>
+
+<p>Your order has been delivered. We hope you're happy with your purchase!</p>
+
+<div class="info-box">
+    <div class="info-row">
+        <span class="info-label">Order Number</span>
+        <span class="info-value">{{ metadata.order_number }}</span>
+    </div>
+    <div class="info-row">
+        <span class="info-label">Status</span>
+        <span class="info-value" style="color: #E60549;">Completed</span>
+    </div>
+    <div class="info-row">
+        <span class="info-label">Total Amount</span>
+        <span class="info-value">UGX {{ metadata.total_amount }}</span>
+    </div>
+    {% if metadata.merchant_name %}
+    <div class="info-row">
+        <span class="info-label">Merchant</span>
+        <span class="info-value">{{ metadata.merchant_name }}</span>
+    </div>
+    {% endif %}
+</div>
+
+<p>Thank you for shopping with {{ site_name }}. We hope to see you again!</p>
+
+<a href="{{ site_url }}/orders/{{ metadata.order_number }}" class="button">
+    View Order Details
+</a>
+
+<p style="font-size: 13px; color: #999; margin-top: 30px;">
+    Had an issue with your order? Contact our support team at
+    <a href="{{ site_url }}/contact" style="color: #E60549;">{{ site_url }}/contact</a>.
+</p>
+{% endblock %}

@@ -1,0 +1,33 @@
+<!-- kakebe_apps/notifications/templates/emails/merchant_suspended.html -->
+{% extends "emails/base.html" %}
+
+{% block content %}
+<h2>Account Action Required</h2>
+
+<p>Hi {{ user.name|default:user.email }},</p>
+
+<p>{{ message }}</p>
+
+<div class="info-box">
+    <div class="info-row">
+        <span class="info-label">Account Status</span>
+        <span class="info-value">{{ metadata.status|default:"Suspended" }}</span>
+    </div>
+    {% if metadata.reason %}
+    <div class="info-row">
+        <span class="info-label">Reason</span>
+        <span class="info-value">{{ metadata.reason }}</span>
+    </div>
+    {% endif %}
+</div>
+
+<p>If you believe this is a mistake or would like to appeal this decision, please contact our support team.</p>
+
+<a href="{{ site_url }}/contact" class="button">
+    Contact Support
+</a>
+
+<p style="font-size: 13px; color: #999; margin-top: 30px;">
+    Our support team will review your case and get back to you as soon as possible.
+</p>
+{% endblock %}

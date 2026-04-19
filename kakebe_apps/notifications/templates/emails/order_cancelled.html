@@ -1,0 +1,48 @@
+<!-- kakebe_apps/notifications/templates/emails/order_cancelled.html -->
+{% extends "emails/base.html" %}
+
+{% block content %}
+<h2>Order Cancelled</h2>
+
+<p>Hi {{ user.name|default:user.email }},</p>
+
+<p>We're sorry to let you know that your order has been cancelled.</p>
+
+<div class="info-box">
+    <div class="info-row">
+        <span class="info-label">Order Number</span>
+        <span class="info-value">{{ metadata.order_number }}</span>
+    </div>
+    <div class="info-row">
+        <span class="info-label">Status</span>
+        <span class="info-value">Cancelled</span>
+    </div>
+    <div class="info-row">
+        <span class="info-label">Total Amount</span>
+        <span class="info-value">UGX {{ metadata.total_amount }}</span>
+    </div>
+    {% if metadata.merchant_name %}
+    <div class="info-row">
+        <span class="info-label">Merchant</span>
+        <span class="info-value">{{ metadata.merchant_name }}</span>
+    </div>
+    {% endif %}
+    {% if metadata.reason %}
+    <div class="info-row">
+        <span class="info-label">Reason</span>
+        <span class="info-value">{{ metadata.reason }}</span>
+    </div>
+    {% endif %}
+</div>
+
+<p>If you believe this was a mistake or have any questions, please contact our support team.</p>
+
+<a href="{{ site_url }}/orders" class="button">
+    View My Orders
+</a>
+
+<p style="font-size: 13px; color: #999; margin-top: 30px;">
+    If you have any questions, don't hesitate to reach out to our support team at
+    <a href="{{ site_url }}/contact" style="color: #E60549;">{{ site_url }}/contact</a>.
+</p>
+{% endblock %}
