@@ -136,6 +136,7 @@ class OrderIntentViewSet(viewsets.ModelViewSet):
         serializer.is_valid(raise_exception=True)
 
         user = request.user
+        analytics.checkout_started(user.id)
 
         try:
             cart = Cart.objects.prefetch_related(
@@ -143,6 +144,7 @@ class OrderIntentViewSet(viewsets.ModelViewSet):
             ).get(user=user)
 
             if not cart.items.exists():
+                analytics.checkout_failed(user.id, reason='empty_cart')
                 return Response({
                     'success': False,
                     'error': 'Cart is empty'
@@ -150,6 +152,7 @@ class OrderIntentViewSet(viewsets.ModelViewSet):
 
             validation_errors = cart.validate_items()
             if validation_errors:
+                analytics.checkout_failed(user.id, reason='items_unavailable')
                 return Response({
                     'success': False,
                     'error': 'Some items are no longer available',
@@ -166,6 +169,7 @@ class OrderIntentViewSet(viewsets.ModelViewSet):
                 if item.listing.price is None
             ]
             if price_errors:
+                analytics.checkout_failed(user.id, reason='price_missing')
                 return Response({
                     'success': False,
                     'error': 'Some items do not have a fixed price and cannot be checked out.',
@@ -298,6 +302,8 @@ class OrderIntentViewSet(viewsets.ModelViewSet):
         order.status = 'CONFIRMED'
         order.save()
 
+        analytics.order_status_changed(request.user.id, order, 'NEW', 'CONFIRMED')
+
         serializer = self.get_serializer(order)
         return Response({
             'success': True,
@@ -327,6 +333,8 @@ class OrderIntentViewSet(viewsets.ModelViewSet):
 
         order.status = 'COMPLETED'
         order.save()
+
+        analytics.order_completed(request.user.id, order)
 
         serializer = self.get_serializer(order)
         return Response({
@@ -359,10 +367,13 @@ class OrderIntentViewSet(viewsets.ModelViewSet):
                 'error': f'Invalid status. Must be one of: {", ".join(valid_statuses)}'
             }, status=status.HTTP_400_BAD_REQUEST)
 
+        old_status = order.status
         order.status = new_status
         if notes:
             order.notes = notes
         order.save()  # Signal handles notification
+
+        analytics.order_status_changed(request.user.id, order, old_status, new_status)
 
         serializer = self.get_serializer(order)
         return Response({
@@ -398,6 +409,8 @@ class OrderIntentViewSet(viewsets.ModelViewSet):
         order.cancellation_reason = reason
         order.notes = f"Cancelled by buyer. Reason: {reason}"
         order.save()  # signal handles notification
+
+        analytics.order_cancelled(request.user.id, order, cancelled_by='buyer', reason=reason)
 
         serializer = self.get_serializer(order)
         return Response({
@@ -442,6 +455,8 @@ class OrderIntentViewSet(viewsets.ModelViewSet):
         order.cancellation_reason = reason
         order.notes = f"Cancelled by merchant. Reason: {reason}"
         order.save()  # signal handles notification
+
+        analytics.order_cancelled(request.user.id, order, cancelled_by='merchant', reason=reason)
 
         serializer = self.get_serializer(order)
         return Response({

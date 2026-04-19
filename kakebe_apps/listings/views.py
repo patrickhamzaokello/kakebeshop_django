@@ -137,6 +137,8 @@ class ListingViewSet(viewsets.ViewSet):
         # Filter by category
         category_id = request.query_params.get('category', None)
         if category_id:
+            if request.user.is_authenticated:
+                analytics.category_browsed(request.user.id, category_id)
             queryset = queryset.filter(category_id=category_id)
 
         # Filter by merchant
@@ -220,6 +222,8 @@ class ListingViewSet(viewsets.ViewSet):
 
         # Public view: must be verified and active
         listing = get_object_or_404(self.get_queryset(), pk=pk)
+        if request.user.is_authenticated:
+            analytics.listing_viewed(request.user.id, listing)
         serializer = ListingDetailSerializer(listing, context={'request': request})
         return Response(serializer.data)
 
@@ -775,6 +779,9 @@ class ListingViewSet(viewsets.ViewSet):
                 merchant=request.user.merchant_profile,
                 new_status=new_status
             )
+
+            if new_status == 'PENDING' and updated:
+                analytics.listing_submitted_for_review(request.user.id, count=updated)
 
             return Response({
                 'detail': f'{updated} listing(s) updated to {new_status}.',

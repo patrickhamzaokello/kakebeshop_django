@@ -12,6 +12,7 @@ from .serializers import (
     AddToWishlistSerializer
 )
 from kakebe_apps.listings.models import Listing
+from kakebe_apps.analytics import events as analytics
 
 
 class StandardResultsSetPagination(PageNumberPagination):
@@ -84,6 +85,8 @@ class CartViewSet(viewsets.ViewSet):
         else:
             message = "Item added to cart"
 
+        analytics.cart_item_added(request.user.id, listing, quantity, was_update=not created)
+
         return Response({
             'message': message,
             'cart_item': CartItemSerializer(cart_item).data
@@ -112,6 +115,7 @@ class CartViewSet(viewsets.ViewSet):
         cart = self.get_or_create_cart(request.user)
         cart_item = get_object_or_404(CartItem, id=item_id, cart=cart)
 
+        analytics.cart_item_removed(request.user.id, cart_item.listing)
         cart_item.delete()
 
         return Response({
@@ -124,6 +128,7 @@ class CartViewSet(viewsets.ViewSet):
         cart = self.get_or_create_cart(request.user)
         cart_item = get_object_or_404(CartItem, cart=cart, listing_id=listing_id)
 
+        analytics.cart_item_removed(request.user.id, cart_item.listing)
         cart_item.delete()
 
         return Response({
@@ -171,6 +176,8 @@ class CartViewSet(viewsets.ViewSet):
         """Clear all items from cart"""
         cart = self.get_or_create_cart(request.user)
         cart.items.all().delete()
+
+        analytics.cart_cleared(request.user.id)
 
         return Response({
             'message': 'Cart cleared'
@@ -247,6 +254,8 @@ class WishlistViewSet(viewsets.ViewSet):
                 'message': 'Item already in wishlist',
                 'wishlist_item': WishlistItemSerializer(wishlist_item).data
             }, status=status.HTTP_200_OK)
+
+        analytics.wishlist_item_added(request.user.id, listing)
 
         return Response({
             'message': 'Item added to wishlist',

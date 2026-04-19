@@ -33,6 +33,7 @@ from rest_framework.pagination import PageNumberPagination
 
 from kakebe_apps.listings.models import Listing
 from kakebe_apps.merchants.models import Merchant
+from kakebe_apps.analytics import events as analytics
 
 
 
@@ -173,6 +174,8 @@ class UserIntentViewSet(viewsets.ModelViewSet):
         serializer.is_valid(raise_exception=True)
         intent = serializer.save()
 
+        analytics.marketplace_intent_set(request.user.id, intent.intent)
+
         return Response({
             'success': True,
             'message': 'Intent saved successfully',
@@ -265,6 +268,10 @@ class OnboardingStatusViewSet(viewsets.ReadOnlyModelViewSet):
             onboarding.profile_completed = True
 
         onboarding.check_completion()
+
+        analytics.onboarding_step_completed(
+            request.user.id, step=step, all_complete=onboarding.is_onboarding_complete
+        )
 
         serializer = self.get_serializer(onboarding)
         return Response({
@@ -835,6 +842,20 @@ class EnhancedSearchView(APIView):
 
         # Sort results
         results = self._sort_results(results, sort_by)
+
+        if request.user.is_authenticated:
+            analytics.search_performed(
+                request.user.id,
+                query=query,
+                results_count=len(results),
+                search_type=search_type or 'all',
+                filters={
+                    'category': category_id,
+                    'min_price': min_price,
+                    'max_price': max_price,
+                    'sort': sort_by,
+                },
+            )
 
         # Paginate
         paginator = SearchPagination()

@@ -7,6 +7,7 @@ from rest_framework.pagination import PageNumberPagination
 from rest_framework.response import Response
 from rest_framework.viewsets import ViewSet
 
+from kakebe_apps.analytics import events as analytics
 from kakebe_apps.categories.models import Category, Tag
 from kakebe_apps.imagehandler.models import ImageAsset
 from kakebe_apps.listings.models import Listing
@@ -260,6 +261,7 @@ class AdminMerchantViewSet(ViewSet):
         merchant.verified = True
         merchant.verification_date = timezone.now()
         merchant.save(update_fields=['verified', 'verification_date', 'updated_at'])
+        analytics.merchant_verified(merchant)
         return Response({'success': True, 'message': 'Merchant verified', 'data': AdminMerchantSerializer(merchant).data})
 
     @action(detail=True, methods=['post'])
@@ -374,6 +376,7 @@ class AdminListingViewSet(ViewSet):
         listing.status = 'ACTIVE'
         listing.is_verified = True
         listing.save(update_fields=['status', 'is_verified', 'updated_at'])
+        analytics.listing_approved(listing)
         return Response({'success': True, 'message': 'Listing approved', 'data': AdminListingSerializer(listing).data})
 
     @action(detail=True, methods=['post'])
