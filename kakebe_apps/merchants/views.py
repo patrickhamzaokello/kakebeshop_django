@@ -1,5 +1,7 @@
 # kakebe_apps/merchants/views.py
 
+import uuid
+
 from rest_framework import viewsets, permissions, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
@@ -115,8 +117,21 @@ class MerchantViewSet(viewsets.ViewSet):
         )
         return Response(serializer.data)
 
+    def _validate_uuid(self, pk):
+        """Return a 400 Response if pk is not a valid UUID, else None."""
+        try:
+            uuid.UUID(str(pk))
+        except ValueError:
+            return Response(
+                {'detail': f'"{pk}" is not a valid merchant ID. A UUID is required.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        return None
+
     def retrieve(self, request, pk=None):
         """Retrieve single merchant profile (must be verified and active)"""
+        if (error := self._validate_uuid(pk)):
+            return error
         merchant = get_object_or_404(self.get_queryset(), pk=pk)
         serializer = MerchantDetailSerializer(merchant, context={'request': request})
         return Response(serializer.data)
@@ -158,6 +173,8 @@ class MerchantViewSet(viewsets.ViewSet):
                    'views_count', '-views_count' (default: '-created_at')
         """
         # Ensure the merchant exists and is publicly visible
+        if (error := self._validate_uuid(pk)):
+            return error
         merchant = get_object_or_404(self.get_queryset(), pk=pk)
 
         # Import here to avoid circular imports

@@ -1,5 +1,5 @@
 from django.contrib.auth import get_user_model
-from django.db.models import Q
+from django.db.models import Count, Q
 from django.utils import timezone
 from rest_framework import status
 from rest_framework.decorators import action
@@ -424,8 +424,13 @@ class AdminCategoryViewSet(ViewSet):
     permission_classes = [IsStaffUser]
     pagination_class = AdminPagination
 
+    def _get_base_qs(self):
+        return Category.objects.select_related('parent').annotate(
+            listings_count=Count('listings', filter=Q(listings__deleted_at__isnull=True))
+        ).order_by('sort_order', 'name')
+
     def list(self, request):
-        qs = Category.objects.select_related('parent').order_by('sort_order', 'name')
+        qs = self._get_base_qs()
 
         q = request.query_params.get('q', '').strip()
         if q:
@@ -447,7 +452,7 @@ class AdminCategoryViewSet(ViewSet):
 
     def retrieve(self, request, pk=None):
         try:
-            category = Category.objects.select_related('parent').get(pk=pk)
+            category = self._get_base_qs().get(pk=pk)
         except Category.DoesNotExist:
             return Response({'success': False, 'error': 'Category not found'}, status=status.HTTP_404_NOT_FOUND)
         return Response({'success': True, 'data': AdminCategorySerializer(category).data})

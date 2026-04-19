@@ -64,6 +64,8 @@ class PromotionalBannerAdmin(admin.ModelAdmin):
             return format_html('<span style="color: orange;">● Pending Verification</span>')
         elif not obj.is_active:
             return format_html('<span style="color: gray;">● Disabled</span>')
+        elif not obj.start_date or not obj.end_date:
+            return format_html('<span style="color: gray;">● No Schedule</span>')
         else:
             now = timezone.now()
             if now < obj.start_date:
@@ -79,6 +81,8 @@ class PromotionalBannerAdmin(admin.ModelAdmin):
     status_indicator.short_description = 'Current Status'
 
     def active_period(self, obj):
+        if not obj.start_date or not obj.end_date:
+            return '—'
         return f"{obj.start_date.strftime('%Y-%m-%d')} to {obj.end_date.strftime('%Y-%m-%d')}"
 
     active_period.short_description = 'Active Period'

@@ -109,11 +109,13 @@ class PromotionalBanner(models.Model):
             raise ValidationError("Category is required when link type is Category")
 
         # Validate dates
-        if self.end_date <= self.start_date:
+        if self.start_date and self.end_date and self.end_date <= self.start_date:
             raise ValidationError("End date must be after start date")
 
     def is_currently_active(self):
         """Check if banner is currently active based on dates and status"""
+        if not self.start_date or not self.end_date:
+            return False
         now = timezone.now()
         return (
                 self.is_active and

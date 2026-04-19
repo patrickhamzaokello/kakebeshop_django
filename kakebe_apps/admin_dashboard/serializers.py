@@ -109,6 +109,9 @@ class AdminCategorySerializer(serializers.ModelSerializer):
         read_only_fields = ['id', 'slug', 'parent_name', 'listings_count', 'created_at', 'updated_at']
 
     def get_listings_count(self, obj):
+        # Prefer the annotation set by AdminCategoryViewSet to avoid an extra query per row.
+        if hasattr(obj, 'listings_count'):
+            return obj.listings_count
         return obj.listings.filter(deleted_at__isnull=True).count()
 
 

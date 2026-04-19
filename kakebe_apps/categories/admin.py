@@ -119,7 +119,11 @@ class CategoryAdmin(admin.ModelAdmin):
         """Display name with indentation for hierarchy"""
         level = 0
         current = obj
-        while current.parent:
+        seen = {obj.pk}
+        while current.parent_id is not None:
+            if current.parent_id in seen:
+                break
+            seen.add(current.parent_id)
             level += 1
             current = current.parent
 
