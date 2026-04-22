@@ -387,7 +387,7 @@ class AddPhoneNumberSerializer(serializers.Serializer):
 
             if existing_user:
                 raise serializers.ValidationError({
-                    'phone': 'This phone number is already registered to another account'
+                    'phone': ['This phone number is already registered to another account.']
                 })
 
         return attrs
@@ -446,12 +446,11 @@ class UpdatePhoneNumberSerializer(serializers.Serializer):
 
             if existing_user:
                 raise serializers.ValidationError({
-                    'phone': 'This phone number is already in use by another account'
+                    'phone': ['This phone number is already in use by another account.']
                 })
 
         return attrs
 
 
 class ResendPhoneVerificationSerializer(serializers.Serializer):
-    """Serializer for resending phone verification code"""
-    pass
+    phone = serializers.CharField(max_length=20, required=False)

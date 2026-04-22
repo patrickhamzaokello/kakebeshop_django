@@ -540,15 +540,10 @@ class AddPhoneNumberView(generics.GenericAPIView):
             if result['success']:
                 return Response({
                     'success': True,
-                    'message': 'Phone number added. Verification code sent via SMS.',
-                    'phone': phone,
-                    'expires_in': '10 minutes'
+                    'message': f'Verification code sent to {phone}',
                 }, status=status.HTTP_200_OK)
             else:
-                # Rollback
-                user.phone = None
-                user.save()
-
+                # Phone remains saved — Twilio failure must not roll back the stored number
                 return Response({
                     'error': 'Failed to send verification code',
                     'message': result.get('message', 'SMS service unavailable')
@@ -610,7 +605,9 @@ class VerifyPhoneNumberView(generics.GenericAPIView):
             else:
                 return Response({
                     'error': 'Verification failed',
-                    'message': result.get('message', 'Invalid code')
+                    'details': {
+                        'code': ['Invalid or expired verification code.']
+                    }
                 }, status=status.HTTP_400_BAD_REQUEST)
 
         except ValidationError as e:
