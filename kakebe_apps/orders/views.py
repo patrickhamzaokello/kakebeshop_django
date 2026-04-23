@@ -213,6 +213,7 @@ class OrderIntentViewSet(viewsets.ModelViewSet):
                         merchant=merchant,
                         address=address,
                         notes=serializer.validated_data.get('notes', ''),
+                        delivery_mode=serializer.validated_data.get('delivery_mode'),
                         total_amount=total_amount,
                         delivery_fee=delivery_fee,
                         expected_delivery_date=serializer.validated_data.get('expected_delivery_date'),

@@ -73,7 +73,21 @@ class OrderIntent(models.Model):
     buyer = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name='orders')
     merchant = models.ForeignKey(Merchant, on_delete=models.PROTECT, related_name='orders')
     address = models.ForeignKey(UserAddress, on_delete=models.PROTECT)
+    DELIVERY_MODE_CHOICES = [
+        ('PICKUP',    'Pickup'),
+        ('DELIVERY',  'Delivery'),
+        ('DIGITAL',   'Digital'),
+        ('IN_PERSON', 'In Person'),
+        ('REMOTE',    'Remote'),
+    ]
+
     notes = models.TextField(null=True, blank=True)
+    delivery_mode = models.CharField(
+        max_length=20,
+        choices=DELIVERY_MODE_CHOICES,
+        null=True,
+        blank=True,
+    )
     total_amount = models.DecimalField(max_digits=12, decimal_places=2)
     delivery_fee = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
     expected_delivery_date = models.DateField(null=True, blank=True)

@@ -38,10 +38,10 @@ class OrderIntentSerializer(serializers.ModelSerializer):
         model = OrderIntent
         fields = [
             'id', 'order_number', 'buyer', 'buyer_name', 'merchant',
-            'merchant_name', 'address', 'notes', 'total_amount',
-            'delivery_fee', 'expected_delivery_date', 'status',
+            'merchant_name', 'address', 'notes', 'delivery_mode',
+            'total_amount', 'delivery_fee', 'expected_delivery_date', 'status',
             'created_at', 'updated_at', 'items',
-            'order_group', 'order_group_number', 'is_grouped'  # Group fields
+            'order_group', 'order_group_number', 'is_grouped'
         ]
         read_only_fields = ['id', 'order_number', 'created_at', 'updated_at']
 
@@ -64,8 +64,15 @@ class OrderGroupSerializer(serializers.ModelSerializer):
 
 
 class CheckoutRequestSerializer(serializers.Serializer):
+    DELIVERY_MODE_CHOICES = ['PICKUP', 'DELIVERY', 'DIGITAL', 'IN_PERSON', 'REMOTE']
+
     address_id = serializers.UUIDField()
     notes = serializers.CharField(required=False, allow_blank=True)
+    delivery_mode = serializers.ChoiceField(
+        choices=DELIVERY_MODE_CHOICES,
+        required=False,
+        allow_null=True,
+    )
     delivery_fee = serializers.DecimalField(
         max_digits=10,
         decimal_places=2,
