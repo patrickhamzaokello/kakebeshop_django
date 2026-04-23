@@ -288,15 +288,44 @@ def listing_approved(listing) -> None:
 
 def listing_created(user_id, listing) -> None:
     try:
+        from kakebe_apps.listings.models import ListingDeliveryMode
+        modes = list(listing.delivery_modes.values_list('mode', flat=True))
+        defaults = ListingDeliveryMode.DEFAULT_MODES_BY_TYPE.get(listing.listing_type, [])
         capture(user_id, 'listing_created', {
             'listing_id': str(listing.id),
             'title': listing.title,
+            'listing_type': listing.listing_type,
             'category_id': str(listing.category_id) if listing.category_id else None,
             'has_price': listing.price is not None,
             'price': float(listing.price) if listing.price is not None else None,
+            'delivery_modes': modes,
+            'delivery_modes_count': len(modes),
+            'used_default_delivery_modes': sorted(modes) == sorted(defaults),
         })
     except Exception as exc:
         logger.warning('PostHog listing_created failed: %s', exc)
+
+
+def listing_delivery_mode_added(user_id, listing, mode: str) -> None:
+    try:
+        capture(user_id, 'listing_delivery_mode_added', {
+            'listing_id': str(listing.id),
+            'listing_type': listing.listing_type,
+            'mode': mode,
+        })
+    except Exception as exc:
+        logger.warning('PostHog listing_delivery_mode_added failed: %s', exc)
+
+
+def listing_delivery_mode_removed(user_id, listing, mode: str) -> None:
+    try:
+        capture(user_id, 'listing_delivery_mode_removed', {
+            'listing_id': str(listing.id),
+            'listing_type': listing.listing_type,
+            'mode': mode,
+        })
+    except Exception as exc:
+        logger.warning('PostHog listing_delivery_mode_removed failed: %s', exc)
 
 
 # ── Phone ─────────────────────────────────────────────────────────────────────

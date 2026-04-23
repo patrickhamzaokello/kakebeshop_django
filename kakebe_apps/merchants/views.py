@@ -164,6 +164,7 @@ class MerchantViewSet(viewsets.ViewSet):
 
         Only returns listings with status='ACTIVE' and is_verified=True.
         The merchant itself must also be verified and active.
+        Authenticated merchant owners can view their own store regardless of verification status.
 
         Query params:
         - page: Page number (default: 1)
@@ -172,10 +173,21 @@ class MerchantViewSet(viewsets.ViewSet):
         - sort_by: One of 'created_at', '-created_at', 'price', '-price',
                    'views_count', '-views_count' (default: '-created_at')
         """
-        # Ensure the merchant exists and is publicly visible
         if (error := self._validate_uuid(pk)):
             return error
-        merchant = get_object_or_404(self.get_queryset(), pk=pk)
+
+        # Public queryset requires verified + active; fall back to owner access
+        merchant = self.get_queryset().filter(pk=pk).first()
+        if merchant is None:
+            if request.user.is_authenticated:
+                merchant = get_object_or_404(
+                    Merchant, pk=pk, user=request.user, deleted_at__isnull=True
+                )
+            else:
+                return Response(
+                    {'detail': 'No Merchant matches the given query.'},
+                    status=status.HTTP_404_NOT_FOUND
+                )
 
         # Import here to avoid circular imports
         from kakebe_apps.listings.models import Listing

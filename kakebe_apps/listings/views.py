@@ -510,7 +510,15 @@ class ListingViewSet(viewsets.ViewSet):
         serializer.is_valid(raise_exception=True)
 
         try:
+            added_modes = [d['mode'] for d in request.data.get('add_delivery_modes', [])]
+            removed_modes = request.data.get('remove_delivery_modes', [])
+
             listing = serializer.save()  # serializer.update() handles tags/images
+
+            for mode in added_modes:
+                analytics.listing_delivery_mode_added(request.user.id, listing, mode)
+            for mode in removed_modes:
+                analytics.listing_delivery_mode_removed(request.user.id, listing, mode)
 
             ListingService.clear_similarity_cache(listing)
             logger.info(f"Listing updated: {listing.id}")
@@ -938,6 +946,7 @@ class ListingViewSet(viewsets.ViewSet):
 
         try:
             delivery_mode = serializer.save()
+            analytics.listing_delivery_mode_added(request.user.id, listing, delivery_mode.mode)
             return Response(
                 ListingDeliveryModeSerializer(delivery_mode).data,
                 status=status.HTTP_201_CREATED
@@ -975,6 +984,7 @@ class ListingViewSet(viewsets.ViewSet):
                 status=status.HTTP_404_NOT_FOUND
             )
 
+        analytics.listing_delivery_mode_removed(request.user.id, listing, mode)
         return Response(
             {'detail': f'Delivery mode "{mode}" removed.'},
             status=status.HTTP_200_OK
