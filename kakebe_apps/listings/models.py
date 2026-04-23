@@ -301,6 +301,15 @@ class ListingDeliveryMode(models.Model):
             models.Index(fields=['mode']),
         ]
 
+    DEFAULT_MODES_BY_TYPE = {
+        'PRODUCT': ['PICKUP', 'DELIVERY'],
+        'SERVICE': ['IN_PERSON', 'REMOTE', 'PICKUP', 'DELIVERY'],
+    }
+
+    @classmethod
+    def get_defaults_for_type(cls, listing_type):
+        return [{'mode': m} for m in cls.DEFAULT_MODES_BY_TYPE.get(listing_type, [])]
+
     def __str__(self):
         return f"{self.listing.title} - {self.get_mode_display()}"
 

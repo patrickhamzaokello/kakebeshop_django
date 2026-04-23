@@ -247,7 +247,10 @@ class ListingCreateSerializer(serializers.ModelSerializer):
                 **hours_data
             )
 
-        # Add delivery modes
+        # Add delivery modes — fall back to type-based defaults if seller didn't configure any
+        if not delivery_modes_data:
+            delivery_modes_data = ListingDeliveryMode.get_defaults_for_type(listing.listing_type)
+
         for mode_data in delivery_modes_data:
             ListingDeliveryMode.objects.create(listing=listing, **mode_data)
 
