@@ -4,10 +4,33 @@
 from rest_framework import serializers
 from django.utils import timezone
 from django.utils.text import slugify
-from .models import Listing, ListingTag, ListingBusinessHour
+from .models import Listing, ListingTag, ListingBusinessHour, ListingDeliveryMode
 from kakebe_apps.categories.serializers import CategoryListSerializer as CategorySerializer, TagSerializer
 from kakebe_apps.merchants.serializers import MerchantListSerializer
 from ..imagehandler.models import ImageAsset
+
+
+class ListingDeliveryModeSerializer(serializers.ModelSerializer):
+    mode_display = serializers.CharField(source='get_mode_display', read_only=True)
+
+    class Meta:
+        model = ListingDeliveryMode
+        fields = ['id', 'mode', 'mode_display', 'notes', 'delivery_fee', 'estimated_days', 'created_at']
+        read_only_fields = ['id', 'created_at']
+
+    def create(self, validated_data):
+        listing = self.context['listing']
+        return ListingDeliveryMode.objects.create(listing=listing, **validated_data)
+
+
+class ListingDeliveryModeWriteSerializer(serializers.Serializer):
+    """Used inline inside create/update serializers."""
+    mode = serializers.ChoiceField(choices=ListingDeliveryMode.DELIVERY_MODE_CHOICES)
+    notes = serializers.CharField(max_length=255, required=False, default='')
+    delivery_fee = serializers.DecimalField(
+        max_digits=12, decimal_places=2, required=False, allow_null=True
+    )
+    estimated_days = serializers.IntegerField(min_value=0, required=False, allow_null=True)
 
 
 class ListingBusinessHourSerializer(serializers.ModelSerializer):
@@ -39,6 +62,7 @@ class ListingListSerializer(serializers.ModelSerializer):
     merchant = MerchantListSerializer(read_only=True)
     category_name = serializers.CharField(source='category.name', read_only=True)
     primary_image = serializers.SerializerMethodField()
+    delivery_modes = serializers.SerializerMethodField()
 
     class Meta:
         model = Listing
@@ -47,13 +71,16 @@ class ListingListSerializer(serializers.ModelSerializer):
             'category_name', 'price_type',
             'price', 'price_min', 'price_max', 'currency',
             'is_featured', 'is_verified', 'views_count',
-            'primary_image', 'created_at'
+            'primary_image', 'delivery_modes', 'created_at'
         ]
 
     def get_primary_image(self, obj):
         if hasattr(obj, '_cached_primary_image'):
             return obj._cached_primary_image
         return obj.primary_image
+
+    def get_delivery_modes(self, obj):
+        return list(obj.delivery_modes.values_list('mode', flat=True))
 
 
 class ListingDetailSerializer(serializers.ModelSerializer):
@@ -62,6 +89,7 @@ class ListingDetailSerializer(serializers.ModelSerializer):
     category = CategorySerializer(read_only=True)
     tags = TagSerializer(many=True, read_only=True)
     business_hours = ListingBusinessHourSerializer(many=True, read_only=True)
+    delivery_modes = ListingDeliveryModeSerializer(many=True, read_only=True)
     is_active = serializers.BooleanField(read_only=True)
     images = serializers.SerializerMethodField()
     share_url = serializers.SerializerMethodField()
@@ -75,7 +103,7 @@ class ListingDetailSerializer(serializers.ModelSerializer):
             'status', 'rejection_reason', 'is_verified', 'verified_at',
             'is_featured', 'featured_until', 'views_count', 'contact_count',
             'metadata', 'expires_at', 'created_at', 'updated_at',
-            'business_hours', 'is_active', 'images', 'share_url'
+            'business_hours', 'delivery_modes', 'is_active', 'images', 'share_url'
         ]
         read_only_fields = [
             'id', 'merchant', 'is_verified', 'verified_at',
@@ -109,6 +137,9 @@ class ListingCreateSerializer(serializers.ModelSerializer):
         write_only=True,
         required=False
     )
+    delivery_modes_data = ListingDeliveryModeWriteSerializer(
+        many=True, write_only=True, required=False, default=list
+    )
 
     class Meta:
         model = Listing
@@ -116,7 +147,8 @@ class ListingCreateSerializer(serializers.ModelSerializer):
             'title', 'description', 'listing_type', 'category',
             'price_type', 'price', 'price_min',
             'price_max', 'currency', 'is_price_negotiable',
-            'tags', 'image_group_ids', 'business_hours_data', 'metadata'
+            'tags', 'image_group_ids', 'business_hours_data',
+            'delivery_modes_data', 'metadata'
         ]
 
     def validate(self, attrs):
@@ -136,6 +168,15 @@ class ListingCreateSerializer(serializers.ModelSerializer):
                 raise serializers.ValidationError(
                     "Minimum price must be less than maximum price."
                 )
+
+        # Validate no duplicate modes in the submitted list
+        delivery_modes_data = attrs.get('delivery_modes_data', [])
+        if delivery_modes_data:
+            submitted_modes = [d['mode'] for d in delivery_modes_data]
+            if len(submitted_modes) != len(set(submitted_modes)):
+                raise serializers.ValidationError({
+                    'delivery_modes_data': ['Duplicate delivery modes are not allowed.']
+                })
 
         # Validate image groups if provided
         image_group_ids = attrs.get('image_group_ids', [])
@@ -162,6 +203,7 @@ class ListingCreateSerializer(serializers.ModelSerializer):
         tag_names = validated_data.pop('tags', [])
         image_group_ids = validated_data.pop('image_group_ids', [])
         business_hours_data = validated_data.pop('business_hours_data', [])
+        delivery_modes_data = validated_data.pop('delivery_modes_data', [])
 
         # Get merchant from request user
         merchant = self.context['request'].user.merchant_profile
@@ -205,6 +247,10 @@ class ListingCreateSerializer(serializers.ModelSerializer):
                 **hours_data
             )
 
+        # Add delivery modes
+        for mode_data in delivery_modes_data:
+            ListingDeliveryMode.objects.create(listing=listing, **mode_data)
+
         return listing
 
 
@@ -232,6 +278,15 @@ class ListingUpdateSerializer(serializers.ModelSerializer):
         required=False,
         help_text="List of image group IDs to remove from this listing"
     )
+    add_delivery_modes = ListingDeliveryModeWriteSerializer(
+        many=True, write_only=True, required=False
+    )
+    remove_delivery_modes = serializers.ListField(
+        child=serializers.ChoiceField(choices=ListingDeliveryMode.DELIVERY_MODE_CHOICES),
+        write_only=True,
+        required=False,
+        help_text="List of mode strings to remove, e.g. ['PICKUP', 'DIGITAL']"
+    )
 
     class Meta:
         model = Listing
@@ -240,7 +295,8 @@ class ListingUpdateSerializer(serializers.ModelSerializer):
             'price_type', 'price', 'price_min',
             'price_max', 'currency', 'is_price_negotiable',
             'tags', 'metadata', 'status',
-            'add_image_group_ids', 'remove_image_group_ids'
+            'add_image_group_ids', 'remove_image_group_ids',
+            'add_delivery_modes', 'remove_delivery_modes',
         ]
 
     def validate(self, attrs):
@@ -279,6 +335,42 @@ class ListingUpdateSerializer(serializers.ModelSerializer):
             if price_min >= price_max:
                 raise serializers.ValidationError({
                     'price_range': 'Minimum price must be less than maximum price.'
+                })
+
+        # Validate delivery mode operations
+        add_modes = attrs.get('add_delivery_modes', [])
+        remove_modes = attrs.get('remove_delivery_modes', [])
+
+        if add_modes:
+            submitted = [d['mode'] for d in add_modes]
+            if len(submitted) != len(set(submitted)):
+                raise serializers.ValidationError({
+                    'add_delivery_modes': ['Duplicate delivery modes are not allowed.']
+                })
+            existing = set(
+                self.instance.delivery_modes
+                .filter(mode__in=submitted)
+                .values_list('mode', flat=True)
+            )
+            if existing:
+                raise serializers.ValidationError({
+                    'add_delivery_modes': [
+                        f"Delivery mode(s) already set on this listing: {sorted(existing)}"
+                    ]
+                })
+
+        if remove_modes:
+            existing = set(
+                self.instance.delivery_modes
+                .filter(mode__in=remove_modes)
+                .values_list('mode', flat=True)
+            )
+            missing = set(remove_modes) - existing
+            if missing:
+                raise serializers.ValidationError({
+                    'remove_delivery_modes': [
+                        f"Delivery mode(s) not set on this listing: {sorted(missing)}"
+                    ]
                 })
 
         # Validate image group operations
@@ -324,6 +416,8 @@ class ListingUpdateSerializer(serializers.ModelSerializer):
         tag_names = validated_data.pop('tags', None)
         add_image_groups = validated_data.pop('add_image_group_ids', [])
         remove_image_groups = validated_data.pop('remove_image_group_ids', [])
+        add_delivery_modes = validated_data.pop('add_delivery_modes', [])
+        remove_delivery_modes = validated_data.pop('remove_delivery_modes', [])
 
         # Update listing fields
         for attr, value in validated_data.items():
@@ -376,6 +470,14 @@ class ListingUpdateSerializer(serializers.ModelSerializer):
                 is_confirmed=False,
                 order=0
             )
+
+        # Add delivery modes
+        for mode_data in add_delivery_modes:
+            ListingDeliveryMode.objects.create(listing=instance, **mode_data)
+
+        # Remove delivery modes
+        if remove_delivery_modes:
+            instance.delivery_modes.filter(mode__in=remove_delivery_modes).delete()
 
         return instance
 

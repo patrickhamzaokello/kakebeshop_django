@@ -13,7 +13,7 @@ from django.views.decorators.cache import cache_page
 import csv
 import logging
 
-from .models import Listing, ListingBusinessHour
+from .models import Listing, ListingBusinessHour, ListingDeliveryMode
 from .serializers import (
     ListingListSerializer,
     ListingDetailSerializer,
@@ -21,6 +21,7 @@ from .serializers import (
     ListingUpdateSerializer,
     ListingBusinessHourSerializer,
     ListingBusinessHourCreateSerializer,
+    ListingDeliveryModeSerializer,
     MyListingSerializer,
 )
 from .services import ListingService
@@ -114,7 +115,8 @@ class ListingViewSet(viewsets.ViewSet):
             'merchant__user',
             'category'
         ).prefetch_related(
-            'tags'
+            'tags',
+            'delivery_modes',
         )
 
     def list(self, request):
@@ -903,6 +905,80 @@ class ListingViewSet(viewsets.ViewSet):
 
         logger.info(f"CSV export completed for merchant {merchant.id}")
         return response
+
+    @action(
+        detail=True,
+        methods=['post'],
+        permission_classes=[permissions.IsAuthenticated, HasMerchantProfile],
+        url_path='add_delivery_mode'
+    )
+    def add_delivery_mode(self, request, pk=None):
+        """
+        Add a single delivery mode to a listing.
+
+        Body:
+        {
+            "mode": "DELIVERY",
+            "notes": "Kampala only",
+            "delivery_fee": 5000,
+            "estimated_days": 1
+        }
+        """
+        listing = get_object_or_404(
+            Listing,
+            pk=pk,
+            merchant=request.user.merchant_profile
+        )
+
+        serializer = ListingDeliveryModeSerializer(
+            data=request.data,
+            context={'listing': listing}
+        )
+        serializer.is_valid(raise_exception=True)
+
+        try:
+            delivery_mode = serializer.save()
+            return Response(
+                ListingDeliveryModeSerializer(delivery_mode).data,
+                status=status.HTTP_201_CREATED
+            )
+        except Exception:
+            return Response(
+                {'detail': 'This delivery mode is already set on the listing.'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+    @action(
+        detail=True,
+        methods=['delete'],
+        permission_classes=[permissions.IsAuthenticated, HasMerchantProfile],
+        url_path='remove_delivery_mode/(?P<mode>[^/.]+)'
+    )
+    def remove_delivery_mode(self, request, pk=None, mode=None):
+        """
+        Remove a delivery mode from a listing.
+
+        DELETE /listings/{id}/remove_delivery_mode/{mode}/
+        e.g. DELETE /listings/{id}/remove_delivery_mode/PICKUP/
+        """
+        listing = get_object_or_404(
+            Listing,
+            pk=pk,
+            merchant=request.user.merchant_profile
+        )
+
+        deleted, _ = listing.delivery_modes.filter(mode=mode).delete()
+
+        if not deleted:
+            return Response(
+                {'detail': f'Delivery mode "{mode}" not found on this listing.'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        return Response(
+            {'detail': f'Delivery mode "{mode}" removed.'},
+            status=status.HTTP_200_OK
+        )
 
     @action(
         detail=True,

@@ -299,6 +299,61 @@ def listing_created(user_id, listing) -> None:
         logger.warning('PostHog listing_created failed: %s', exc)
 
 
+# ── Phone ─────────────────────────────────────────────────────────────────────
+
+def phone_number_added(user_id, phone: str) -> None:
+    try:
+        identify(user_id, {'has_phone': True, 'phone_verified': False})
+        capture(user_id, 'phone_number_added', {'phone_country': phone[:3] if phone else None})
+    except Exception as exc:
+        logger.warning('PostHog phone_number_added failed: %s', exc)
+
+
+def phone_number_verified(user_id, phone: str) -> None:
+    try:
+        identify(user_id, {'phone_verified': True})
+        capture(user_id, 'phone_number_verified', {'phone_country': phone[:3] if phone else None})
+    except Exception as exc:
+        logger.warning('PostHog phone_number_verified failed: %s', exc)
+
+
+def phone_verification_failed(user_id) -> None:
+    try:
+        capture(user_id, 'phone_verification_failed')
+    except Exception as exc:
+        logger.warning('PostHog phone_verification_failed failed: %s', exc)
+
+
+def phone_number_updated(user_id, phone: str) -> None:
+    try:
+        identify(user_id, {'has_phone': True, 'phone_verified': False})
+        capture(user_id, 'phone_number_updated', {'phone_country': phone[:3] if phone else None})
+    except Exception as exc:
+        logger.warning('PostHog phone_number_updated failed: %s', exc)
+
+
+def phone_number_removed(user_id) -> None:
+    try:
+        identify(user_id, {'has_phone': False, 'phone_verified': False})
+        capture(user_id, 'phone_number_removed')
+    except Exception as exc:
+        logger.warning('PostHog phone_number_removed failed: %s', exc)
+
+
+def phone_otp_sent(user_id, phone: str) -> None:
+    try:
+        capture(user_id, 'phone_otp_sent', {'phone_country': phone[:3] if phone else None})
+    except Exception as exc:
+        logger.warning('PostHog phone_otp_sent failed: %s', exc)
+
+
+def phone_otp_delivery_failed(user_id, phone: str) -> None:
+    try:
+        capture(user_id, 'phone_otp_delivery_failed', {'phone_country': phone[:3] if phone else None})
+    except Exception as exc:
+        logger.warning('PostHog phone_otp_delivery_failed failed: %s', exc)
+
+
 # ── Orders ────────────────────────────────────────────────────────────────────
 
 def checkout_started(user_id) -> None:

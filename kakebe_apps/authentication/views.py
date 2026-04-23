@@ -16,6 +16,7 @@ from .tasks import (
     send_welcome_email_task,
     send_password_reset_email_task,
     send_password_reset_success_email_task,
+    send_phone_otp_task,
 )
 from rest_framework.response import Response
 from rest_framework_simplejwt.tokens import RefreshToken
@@ -528,26 +529,17 @@ class AddPhoneNumberView(generics.GenericAPIView):
             phone = serializer.validated_data['phone']
             user = request.user
 
-            # Update phone
             user.phone = phone
             user.phone_verified = False
             user.save()
 
-            # Send verification
-            twilio = TwilioVerification()
-            result = twilio.send_verification_code(phone)
+            analytics.phone_number_added(user.id, phone)
+            send_phone_otp_task.delay(phone, str(user.id))
 
-            if result['success']:
-                return Response({
-                    'success': True,
-                    'message': f'Verification code sent to {phone}',
-                }, status=status.HTTP_200_OK)
-            else:
-                # Phone remains saved — Twilio failure must not roll back the stored number
-                return Response({
-                    'error': 'Failed to send verification code',
-                    'message': result.get('message', 'SMS service unavailable')
-                }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            return Response({
+                'success': True,
+                'message': f'Verification code sent to {phone}',
+            }, status=status.HTTP_200_OK)
 
         except ValidationError as e:
             return Response({
@@ -596,6 +588,7 @@ class VerifyPhoneNumberView(generics.GenericAPIView):
                 user.phone_verified = True
                 user.save()
 
+                analytics.phone_number_verified(user.id, user.phone)
                 return Response({
                     'success': True,
                     'message': 'Phone number verified successfully',
@@ -603,6 +596,7 @@ class VerifyPhoneNumberView(generics.GenericAPIView):
                     'verified': True
                 }, status=status.HTTP_200_OK)
             else:
+                analytics.phone_verification_failed(user.id)
                 return Response({
                     'error': 'Verification failed',
                     'details': {
@@ -644,21 +638,14 @@ class ResendPhoneVerificationView(generics.GenericAPIView):
                     'phone': user.phone
                 }, status=status.HTTP_200_OK)
 
-            twilio = TwilioVerification()
-            result = twilio.send_verification_code(user.phone)
+            send_phone_otp_task.delay(user.phone, str(user.id))
 
-            if result['success']:
-                return Response({
-                    'success': True,
-                    'message': 'Verification code resent successfully',
-                    'phone': user.phone,
-                    'expires_in': '10 minutes'
-                }, status=status.HTTP_200_OK)
-            else:
-                return Response({
-                    'error': 'Failed to resend verification code',
-                    'message': result.get('message', 'SMS service unavailable')
-                }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            return Response({
+                'success': True,
+                'message': 'Verification code resent successfully',
+                'phone': user.phone,
+                'expires_in': '10 minutes'
+            }, status=status.HTTP_200_OK)
 
         except Exception as e:
             logger.error(f"Error resending phone verification: {str(e)}", exc_info=True)
@@ -687,22 +674,15 @@ class UpdatePhoneNumberView(generics.GenericAPIView):
             user.phone_verified = False
             user.save()
 
-            twilio = TwilioVerification()
-            result = twilio.send_verification_code(phone)
+            analytics.phone_number_updated(user.id, phone)
+            send_phone_otp_task.delay(phone, str(user.id))
 
-            if result['success']:
-                return Response({
-                    'success': True,
-                    'message': 'Phone number updated. Verification code sent.',
-                    'phone': phone,
-                    'verified': False,
-                    'expires_in': '10 minutes'
-                }, status=status.HTTP_200_OK)
-            else:
-                return Response({
-                    'error': 'Failed to send verification code',
-                    'message': result.get('message', 'SMS service unavailable')
-                }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            return Response({
+                'success': True,
+                'message': 'Phone number updated. Verification code sent.',
+                'phone': phone,
+                'verified': False,
+            }, status=status.HTTP_200_OK)
 
         except ValidationError as e:
             return Response({
@@ -734,6 +714,7 @@ class RemovePhoneNumberView(views.APIView):
             user.phone_verified = False
             user.save()
 
+            analytics.phone_number_removed(user.id)
             return Response({
                 'success': True,
                 'message': 'Phone number removed successfully'

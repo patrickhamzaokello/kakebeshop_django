@@ -266,6 +266,45 @@ class Listing(models.Model):
         self.save(update_fields=['contact_count'])
 
 
+class ListingDeliveryMode(models.Model):
+    DELIVERY_MODE_CHOICES = [
+        ('PICKUP',    'Pickup'),
+        ('DELIVERY',  'Delivery'),
+        ('DIGITAL',   'Digital'),
+        ('IN_PERSON', 'In Person'),
+        ('REMOTE',    'Remote'),
+    ]
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    listing = models.ForeignKey(
+        Listing,
+        on_delete=models.CASCADE,
+        related_name='delivery_modes'
+    )
+    mode = models.CharField(max_length=20, choices=DELIVERY_MODE_CHOICES)
+    notes = models.CharField(max_length=255, blank=True)
+    delivery_fee = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        validators=[MinValueValidator(0)]
+    )
+    estimated_days = models.PositiveSmallIntegerField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = 'listing_delivery_modes'
+        unique_together = ('listing', 'mode')
+        indexes = [
+            models.Index(fields=['listing']),
+            models.Index(fields=['mode']),
+        ]
+
+    def __str__(self):
+        return f"{self.listing.title} - {self.get_mode_display()}"
+
+
 class ListingTag(models.Model):
     listing = models.ForeignKey(Listing, on_delete=models.CASCADE)
     tag = models.ForeignKey(Tag, on_delete=models.CASCADE)

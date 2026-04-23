@@ -148,6 +148,38 @@ def send_password_reset_email_task(
 
 
 @shared_task(bind=True, max_retries=3)
+def send_phone_otp_task(self, phone_number: str, user_id: str = None) -> str:
+    """
+    Send a phone OTP via Twilio Verify.
+    Used by add, update, and resend flows — never blocks the HTTP response.
+    Retries on Twilio failure with exponential back-off: 60 s → 120 s → 240 s.
+    Fires PostHog events on delivery success or final failure.
+    """
+    from kakebe_apps.analytics import events as analytics
+
+    try:
+        from .twilio_utils import TwilioVerification
+        twilio = TwilioVerification()
+        result = twilio.send_verification_code(phone_number)
+
+        if not result['success']:
+            raise RuntimeError(result.get('message', 'Twilio returned failure'))
+
+        logger.info("Phone OTP sent to %s", phone_number)
+        analytics.phone_otp_sent(user_id, phone_number)
+        return f"sent:{phone_number}"
+
+    except Exception as exc:
+        logger.warning(
+            "Phone OTP failed for %s (attempt %d/3): %s",
+            phone_number, self.request.retries + 1, exc,
+        )
+        if self.request.retries >= self.max_retries:
+            analytics.phone_otp_delivery_failed(user_id, phone_number)
+        raise self.retry(exc=exc, countdown=_retry_countdown(self.request.retries))
+
+
+@shared_task(bind=True, max_retries=3)
 def send_password_reset_success_email_task(
     self,
     to_email: str,
