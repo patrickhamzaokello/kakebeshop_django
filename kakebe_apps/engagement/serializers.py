@@ -26,40 +26,133 @@ class SavedSearchSerializer(serializers.ModelSerializer):
         read_only_fields = ['user', 'last_notified_at', 'created_at']
 
 
+class ChatUserProfileSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = User
+        fields = ['id', 'name', 'email', 'phone', 'profile_image']
+
+
+class ChatMerchantProfileSerializer(serializers.ModelSerializer):
+    store_name = serializers.SerializerMethodField()
+    profile_picture = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Merchant
+        fields = [
+            'id', 'store_name', 'display_name', 'business_name',
+            'profile_picture', 'logo', 'cover_image', 'verified', 'rating',
+        ]
+
+    def get_store_name(self, obj):
+        return obj.display_name or obj.business_name
+
+    def get_profile_picture(self, obj):
+        return obj.logo or obj.cover_image
+
+
 class MessageSerializer(serializers.ModelSerializer):
-    sender_name = serializers.CharField(source='sender.get_full_name', read_only=True)
+    sender_profile = ChatUserProfileSerializer(source='sender', read_only=True)
+    sender_name = serializers.CharField(source='sender.name', read_only=True)
+    is_mine = serializers.SerializerMethodField()
 
     class Meta:
         model = Message
-        fields = ['id', 'sender', 'sender_name', 'message', 'attachment', 'is_read', 'sent_at']
-        read_only_fields = ['sender', 'is_read', 'sent_at']
+        fields = [
+            'id', 'conversation', 'sender', 'sender_name', 'sender_profile',
+            'message', 'attachment', 'is_read', 'is_mine', 'read_at', 'sent_at',
+        ]
+        read_only_fields = [
+            'id', 'conversation', 'sender', 'sender_name', 'sender_profile',
+            'is_read', 'is_mine', 'read_at', 'sent_at',
+        ]
 
-    def validate(self, attrs):
-        conversation = self.context['view'].get_object() if self.instance else self.context.get('conversation')
-        if attrs['sender'] != self.context['request'].user:
-            raise serializers.ValidationError("You can only send messages as yourself.")
-        return attrs
+    def get_is_mine(self, obj):
+        request = self.context.get('request')
+        return bool(request and request.user.is_authenticated and obj.sender_id == request.user.id)
+
+    def validate_message(self, value):
+        if not value.strip():
+            raise serializers.ValidationError("Message cannot be empty.")
+        if len(value) > 4000:
+            raise serializers.ValidationError("Message cannot exceed 4000 characters.")
+        return value
 
 
 class ConversationSerializer(serializers.ModelSerializer):
-    buyer_name = serializers.CharField(source='buyer.get_full_name', read_only=True)
-    seller_name = serializers.CharField(source='seller.get_full_name', read_only=True)
+    buyer_profile = ChatUserProfileSerializer(source='buyer', read_only=True)
+    seller_profile = ChatUserProfileSerializer(source='seller', read_only=True)
+    buyer_name = serializers.CharField(source='buyer.name', read_only=True)
+    seller_name = serializers.CharField(source='seller.name', read_only=True)
+    merchant = serializers.SerializerMethodField()
     listing_title = serializers.CharField(source='listing.title', read_only=True)
     last_message = MessageSerializer(source='messages.last', read_only=True)
     unread_count = serializers.SerializerMethodField()
+    other_participant = serializers.SerializerMethodField()
 
     class Meta:
         model = Conversation
         fields = [
-            'id', 'listing', 'listing_title', 'order_intent', 'buyer', 'buyer_name',
-            'seller', 'seller_name', 'status', 'last_message_at', 'created_at',
-            'last_message', 'unread_count'
+            'id', 'listing', 'listing_title', 'order_intent',
+            'buyer', 'buyer_name', 'buyer_profile',
+            'seller', 'seller_name', 'seller_profile', 'merchant',
+            'other_participant', 'status', 'last_message_at', 'created_at',
+            'updated_at', 'last_message', 'unread_count',
         ]
-        read_only_fields = ['buyer', 'seller', 'status', 'last_message_at', 'created_at']
+        read_only_fields = fields
 
     def get_unread_count(self, obj):
         user = self.context['request'].user
         return obj.messages.filter(is_read=False).exclude(sender=user).count()
+
+    def get_merchant(self, obj):
+        merchant = None
+        if obj.listing_id:
+            merchant = obj.listing.merchant
+        elif hasattr(obj.seller, 'merchant_profile'):
+            merchant = obj.seller.merchant_profile
+
+        if not merchant:
+            return None
+        return ChatMerchantProfileSerializer(merchant, context=self.context).data
+
+    def get_other_participant(self, obj):
+        request = self.context.get('request')
+        if not request:
+            return None
+        other = obj.seller if obj.buyer_id == request.user.id else obj.buyer
+        return ChatUserProfileSerializer(other, context=self.context).data
+
+
+class StartConversationSerializer(serializers.Serializer):
+    merchant_id = serializers.UUIDField(required=False)
+    listing_id = serializers.UUIDField(required=False)
+    order_intent_id = serializers.UUIDField(required=False)
+    message = serializers.CharField(required=False, allow_blank=True, max_length=4000)
+    attachment = serializers.URLField(required=False, allow_blank=True)
+
+    def validate(self, attrs):
+        if not any(attrs.get(field) for field in ('merchant_id', 'listing_id', 'order_intent_id')):
+            raise serializers.ValidationError(
+                "Provide merchant_id, listing_id, or order_intent_id to start a conversation."
+            )
+        message = attrs.get('message', '')
+        attachment = attrs.get('attachment', '')
+        if not message.strip() and not attachment:
+            raise serializers.ValidationError("Provide a message or attachment.")
+        return attrs
+
+
+class SendMessageSerializer(serializers.Serializer):
+    message = serializers.CharField(required=False, allow_blank=True, max_length=4000)
+    attachment = serializers.URLField(required=False, allow_blank=True)
+
+    def validate(self, attrs):
+        message = attrs.get('message', '')
+        attachment = attrs.get('attachment', '')
+        if not message.strip() and not attachment:
+            raise serializers.ValidationError("Provide a message or attachment.")
+        attrs['message'] = message.strip()
+        return attrs
 
 
 

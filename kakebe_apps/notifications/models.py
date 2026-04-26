@@ -23,6 +23,8 @@ class NotificationType(models.TextChoices):
     LISTING_APPROVED = 'LISTING_APPROVED', 'Listing Approved'
     LISTING_REJECTED = 'LISTING_REJECTED', 'Listing Rejected'
 
+    CHAT_MESSAGE = 'CHAT_MESSAGE', 'Chat Message'
+
 
 class NotificationChannel(models.TextChoices):
     """Notification delivery channels"""

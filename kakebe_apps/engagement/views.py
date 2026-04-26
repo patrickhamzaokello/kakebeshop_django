@@ -6,7 +6,7 @@ from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated, IsAdminUser
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
-from django.db import models
+from django.db import models, transaction
 
 from .models import (
     SavedSearch, Conversation, Message,
@@ -22,6 +22,7 @@ from .serializers import (
     PushTokenSerializer, PushTokenCreateSerializer, PushTokenUpdateUsageSerializer,
     ListingCommentSerializer, ListingCommentCreateSerializer,
     ListingCommentUpdateSerializer, ListingCommentReplySerializer,
+    StartConversationSerializer, SendMessageSerializer,
 )
 
 from django.db.models import Q, Value, CharField, F, Case, When, IntegerField
@@ -33,7 +34,10 @@ from rest_framework.pagination import PageNumberPagination
 
 from kakebe_apps.listings.models import Listing
 from kakebe_apps.merchants.models import Merchant
+from kakebe_apps.orders.models import OrderIntent
 from kakebe_apps.analytics import events as analytics
+from kakebe_apps.notifications.models import NotificationType
+from kakebe_apps.notifications.services import NotificationService
 
 
 
@@ -54,9 +58,220 @@ class ConversationViewSet(viewsets.ReadOnlyModelViewSet):
 
     def get_queryset(self):
         user = self.request.user
-        return Conversation.objects.filter(
-            models.Q(buyer=user) | models.Q(seller=user)
-        ).order_by('-last_message_at')
+        return (
+            Conversation.objects
+            .filter(models.Q(buyer=user) | models.Q(seller=user))
+            .select_related(
+                'buyer',
+                'seller',
+                'listing',
+                'listing__merchant',
+                'listing__merchant__user',
+                'order_intent',
+            )
+            .prefetch_related('messages')
+            .order_by(models.F('last_message_at').desc(nulls_last=True), '-created_at')
+        )
+
+    def get_serializer_class(self):
+        if self.action == 'start':
+            return StartConversationSerializer
+        return ConversationSerializer
+
+    def _resolve_chat_target(self, request, serializer):
+        merchant = None
+        listing = None
+        order_intent = None
+
+        listing_id = serializer.validated_data.get('listing_id')
+        merchant_id = serializer.validated_data.get('merchant_id')
+        order_intent_id = serializer.validated_data.get('order_intent_id')
+
+        if order_intent_id:
+            order_intent = get_object_or_404(
+                OrderIntent.objects.select_related('merchant', 'merchant__user'),
+                id=order_intent_id,
+                buyer=request.user,
+            )
+            merchant = order_intent.merchant
+
+        if listing_id:
+            listing = get_object_or_404(
+                Listing.objects.select_related('merchant', 'merchant__user'),
+                id=listing_id,
+                deleted_at__isnull=True,
+            )
+            if merchant and merchant.id != listing.merchant_id:
+                raise ValueError("listing_id does not match the order merchant.")
+            merchant = listing.merchant
+
+        if merchant_id:
+            requested_merchant = get_object_or_404(
+                Merchant.objects.select_related('user'),
+                id=merchant_id,
+                deleted_at__isnull=True,
+            )
+            if merchant and merchant.id != requested_merchant.id:
+                raise ValueError("merchant_id does not match the listing or order merchant.")
+            merchant = requested_merchant
+
+        if not merchant:
+            raise ValueError("A valid merchant could not be resolved.")
+        if merchant.user_id == request.user.id:
+            raise ValueError("You cannot start a conversation with your own merchant profile.")
+        if merchant.status != 'ACTIVE':
+            raise ValueError("This merchant is not available for chat.")
+
+        return merchant, listing, order_intent
+
+    def _create_message_notification(self, conversation, message):
+        recipient = conversation.seller if message.sender_id == conversation.buyer_id else conversation.buyer
+        merchant = conversation.listing.merchant if conversation.listing_id else None
+        if not merchant and hasattr(conversation.seller, 'merchant_profile'):
+            merchant = conversation.seller.merchant_profile
+
+        snippet = message.message[:120] if message.message else 'Sent an attachment'
+        sender_name = message.sender.name or message.sender.email
+        store_name = None
+        if merchant:
+            store_name = merchant.display_name or merchant.business_name
+
+        NotificationService.create_notification(
+            user=recipient,
+            notification_type=NotificationType.CHAT_MESSAGE,
+            title=f'New message from {sender_name}',
+            message=snippet,
+            merchant_id=merchant.id if merchant else None,
+            listing_id=conversation.listing_id,
+            metadata={
+                'conversation_id': str(conversation.id),
+                'message_id': str(message.id),
+                'sender_id': str(message.sender_id),
+                'sender_name': sender_name,
+                'sender_profile_image': message.sender.profile_image,
+                'merchant_id': str(merchant.id) if merchant else None,
+                'merchant_store_name': store_name,
+                'merchant_profile_picture': (merchant.logo or merchant.cover_image) if merchant else None,
+                'listing_title': conversation.listing.title if conversation.listing_id else None,
+                'order_intent_id': str(conversation.order_intent_id) if conversation.order_intent_id else None,
+            },
+        )
+
+    @action(detail=False, methods=['post'], url_path='start')
+    def start(self, request):
+        """
+        Buyer starts or resumes a conversation with a merchant.
+
+        Body accepts merchant_id, listing_id, or order_intent_id plus
+        message/attachment. The first message is queued for notification
+        delivery to the merchant.
+        """
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        try:
+            merchant, listing, order_intent = self._resolve_chat_target(request, serializer)
+        except ValueError as exc:
+            return Response({'success': False, 'error': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+
+        with transaction.atomic():
+            conversation = (
+                Conversation.objects
+                .filter(
+                    buyer=request.user,
+                    seller=merchant.user,
+                    listing=listing,
+                    order_intent=order_intent,
+                    status='ACTIVE',
+                )
+                .first()
+            )
+            created = False
+            if conversation is None:
+                conversation = Conversation.objects.create(
+                    buyer=request.user,
+                    seller=merchant.user,
+                    listing=listing,
+                    order_intent=order_intent,
+                )
+                created = True
+
+            message = Message.objects.create(
+                conversation=conversation,
+                sender=request.user,
+                message=serializer.validated_data.get('message', '').strip(),
+                attachment=serializer.validated_data.get('attachment') or None,
+            )
+            conversation.last_message_at = message.sent_at
+            conversation.save(update_fields=['last_message_at', 'updated_at'])
+            transaction.on_commit(lambda: self._create_message_notification(conversation, message))
+
+        read_serializer = ConversationSerializer(conversation, context=self.get_serializer_context())
+        message_serializer = MessageSerializer(message, context=self.get_serializer_context())
+        return Response({
+            'success': True,
+            'created': created,
+            'conversation': read_serializer.data,
+            'message': message_serializer.data,
+        }, status=status.HTTP_201_CREATED if created else status.HTTP_200_OK)
+
+    @action(detail=True, methods=['get', 'post'], url_path='messages')
+    def messages(self, request, pk=None):
+        """List messages or send a new message in a conversation."""
+        conversation = self.get_object()
+
+        if request.method == 'POST':
+            if conversation.status != 'ACTIVE':
+                return Response(
+                    {'success': False, 'error': 'This conversation is not active.'},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+            serializer = SendMessageSerializer(data=request.data)
+            serializer.is_valid(raise_exception=True)
+
+            with transaction.atomic():
+                message = Message.objects.create(
+                    conversation=conversation,
+                    sender=request.user,
+                    message=serializer.validated_data.get('message', ''),
+                    attachment=serializer.validated_data.get('attachment') or None,
+                )
+                conversation.last_message_at = message.sent_at
+                conversation.save(update_fields=['last_message_at', 'updated_at'])
+                transaction.on_commit(lambda: self._create_message_notification(conversation, message))
+
+            read_serializer = MessageSerializer(message, context=self.get_serializer_context())
+            return Response({'success': True, 'message': read_serializer.data}, status=status.HTTP_201_CREATED)
+
+        queryset = conversation.messages.select_related('sender').order_by('sent_at')
+        page = self.paginate_queryset(queryset)
+        if page is not None:
+            serializer = MessageSerializer(page, many=True, context=self.get_serializer_context())
+            return self.get_paginated_response(serializer.data)
+        serializer = MessageSerializer(queryset, many=True, context=self.get_serializer_context())
+        return Response(serializer.data)
+
+    @action(detail=True, methods=['post'], url_path='mark-read')
+    def mark_read(self, request, pk=None):
+        """Mark all messages from the other participant as read."""
+        conversation = self.get_object()
+        updated = conversation.messages.filter(
+            is_read=False,
+        ).exclude(sender=request.user).update(
+            is_read=True,
+            read_at=timezone.now(),
+        )
+        return Response({'success': True, 'marked_read': updated})
+
+    @action(detail=False, methods=['get'], url_path='unread-count')
+    def unread_count(self, request):
+        """Total unread chat messages for the authenticated user."""
+        count = Message.objects.filter(
+            models.Q(conversation__buyer=request.user) | models.Q(conversation__seller=request.user),
+            is_read=False,
+        ).exclude(sender=request.user).count()
+        return Response({'unread_count': count})
 
 
 class MessageViewSet(mixins.CreateModelMixin,
@@ -66,16 +281,25 @@ class MessageViewSet(mixins.CreateModelMixin,
     permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
-        conversation = get_object_or_404(Conversation, id=self.kwargs['conversation_id'],
-                                         buyer=self.request.user) | get_object_or_404(Conversation, id=self.kwargs['conversation_id'],
-                                                                                     seller=self.request.user)
-        return conversation.messages.all()
+        conversation = get_object_or_404(
+            Conversation.objects.filter(
+                models.Q(buyer=self.request.user) | models.Q(seller=self.request.user)
+            ),
+            id=self.kwargs['conversation_pk'],
+        )
+        return conversation.messages.select_related('sender').order_by('sent_at')
 
     def perform_create(self, serializer):
-        conversation = get_object_or_404(Conversation, id=self.kwargs['conversation_id'])
-        serializer.save(sender=self.request.user, conversation=conversation)
-        conversation.last_message_at = timezone.now()
-        conversation.save()
+        conversation = get_object_or_404(
+            Conversation.objects.filter(
+                models.Q(buyer=self.request.user) | models.Q(seller=self.request.user)
+            ),
+            id=self.kwargs['conversation_pk'],
+        )
+        message = serializer.save(sender=self.request.user, conversation=conversation)
+        conversation.last_message_at = message.sent_at
+        conversation.save(update_fields=['last_message_at', 'updated_at'])
+        ConversationViewSet()._create_message_notification(conversation, message)
 
 
 
