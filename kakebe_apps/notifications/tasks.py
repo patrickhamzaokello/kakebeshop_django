@@ -9,13 +9,16 @@ import requests
 from typing import List, Dict, Any
 
 from .models import (
+    BroadcastNotificationCampaign,
     Notification,
     NotificationDelivery,
     NotificationChannel,
     NotificationStatus,
+    NotificationType,
 )
 from .email_service import EmailNotificationService
 from .push_service import PushNotificationService
+from kakebe_apps.engagement.models import PushToken
 
 logger = logging.getLogger(__name__)
 
@@ -310,3 +313,105 @@ def send_bulk_notifications(notifications_data: List[Dict[str, Any]]):
     except Exception as e:
         logger.error(f"Error in send_bulk_notifications: {str(e)}", exc_info=True)
         return f"Error: {str(e)}"
+
+
+@shared_task(bind=True)
+def send_broadcast_campaign(self, campaign_id: str):
+    """Create and queue a scheduled admin broadcast for all eligible users."""
+    try:
+        campaign = BroadcastNotificationCampaign.objects.get(id=campaign_id)
+    except BroadcastNotificationCampaign.DoesNotExist:
+        logger.error(f"Broadcast campaign {campaign_id} not found")
+        return f"Broadcast campaign {campaign_id} not found"
+
+    if campaign.status in ('SENT', 'CANCELLED'):
+        return f"Broadcast campaign {campaign_id} already {campaign.status}"
+
+    try:
+        campaign.status = 'SENDING'
+        campaign.error_message = ''
+        campaign.save(update_fields=['status', 'error_message', 'updated_at'])
+
+        from django.contrib.auth import get_user_model
+
+        User = get_user_model()
+        queryset = User.objects.filter(is_active=True)
+
+        if campaign.channel == NotificationChannel.EMAIL:
+            queryset = queryset.exclude(email__isnull=True).exclude(email='')
+        elif campaign.channel == NotificationChannel.PUSH:
+            queryset = queryset.filter(push_tokens__is_active=True).distinct()
+        else:
+            raise ValueError(f"Unsupported campaign channel: {campaign.channel}")
+
+        target_count = queryset.count()
+        notification_count = 0
+        metadata = {
+            **(campaign.metadata or {}),
+            'broadcast_campaign_id': str(campaign.id),
+            'broadcast_channel': campaign.channel,
+        }
+
+        for user in queryset.iterator(chunk_size=500):
+            notification = Notification.objects.filter(
+                user=user,
+                notification_type=NotificationType.ADMIN_BROADCAST,
+                metadata__broadcast_campaign_id=str(campaign.id),
+            ).first()
+
+            if notification is None:
+                notification = Notification.objects.create(
+                    user=user,
+                    notification_type=NotificationType.ADMIN_BROADCAST,
+                    title=campaign.title,
+                    message=campaign.message,
+                    metadata=metadata,
+                )
+
+            if notification.deliveries.filter(channel=campaign.channel).exists():
+                notification_count += 1
+                continue
+
+            if campaign.channel == NotificationChannel.EMAIL:
+                recipient = user.email
+            else:
+                push_tokens = list(
+                    PushToken.objects.filter(user=user, is_active=True)
+                    .values_list('token', flat=True)
+                )
+                if not push_tokens:
+                    continue
+                recipient = ','.join(push_tokens)
+
+            NotificationDelivery.objects.create(
+                notification=notification,
+                channel=campaign.channel,
+                recipient=recipient,
+                status=NotificationStatus.PENDING,
+            )
+
+            notification_count += 1
+
+        campaign.status = 'SENT'
+        campaign.target_count = target_count
+        campaign.notification_count = notification_count
+        campaign.sent_at = timezone.now()
+        campaign.save(update_fields=[
+            'status', 'target_count', 'notification_count', 'sent_at', 'updated_at'
+        ])
+
+        process_pending_notifications.delay()
+        logger.info(
+            f"Broadcast campaign {campaign_id} queued {notification_count} notifications"
+        )
+        return f"Broadcast campaign {campaign_id} queued {notification_count} notifications"
+
+    except Exception as exc:
+        campaign.status = 'FAILED'
+        campaign.error_message = str(exc)
+        campaign.save(update_fields=['status', 'error_message', 'updated_at'])
+        logger.error(
+            f"Error sending broadcast campaign {campaign_id}: {str(exc)}",
+            exc_info=True,
+        )
+        raise self.retry(exc=exc, countdown=120, max_retries=3)

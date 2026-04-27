@@ -6,6 +6,7 @@ from kakebe_apps.categories.models import Category, Tag
 from kakebe_apps.listings.models import Listing
 from kakebe_apps.merchants.models import Merchant
 from kakebe_apps.imagehandler.models import ImageAsset
+from kakebe_apps.notifications.models import BroadcastNotificationCampaign
 
 User = get_user_model()
 
@@ -191,6 +192,61 @@ class AdminImageAssetSerializer(serializers.ModelSerializer):
 
     def get_cdn_url(self, obj):
         return obj.cdn_url()
+
+
+# Broadcast notifications
+
+class AdminBroadcastCampaignSerializer(serializers.ModelSerializer):
+    created_by_email = serializers.EmailField(source='created_by.email', read_only=True)
+
+    class Meta:
+        model = BroadcastNotificationCampaign
+        fields = [
+            'id', 'channel', 'title', 'message', 'metadata',
+            'scheduled_at', 'status', 'created_by', 'created_by_email',
+            'celery_task_id', 'target_count', 'notification_count',
+            'error_message', 'sent_at', 'created_at', 'updated_at',
+        ]
+        read_only_fields = [
+            'id', 'status', 'created_by', 'created_by_email', 'celery_task_id',
+            'target_count', 'notification_count', 'error_message',
+            'sent_at', 'created_at', 'updated_at',
+        ]
+
+
+class AdminBroadcastCampaignCreateSerializer(serializers.ModelSerializer):
+    send_now = serializers.BooleanField(default=False, write_only=True)
+    scheduled_at = serializers.DateTimeField(required=False)
+
+    class Meta:
+        model = BroadcastNotificationCampaign
+        fields = ['channel', 'title', 'message', 'metadata', 'scheduled_at', 'send_now']
+
+    def validate_title(self, value):
+        if not value.strip():
+            raise serializers.ValidationError('Title cannot be empty.')
+        return value.strip()
+
+    def validate_message(self, value):
+        if not value.strip():
+            raise serializers.ValidationError('Message cannot be empty.')
+        return value.strip()
+
+    def validate(self, attrs):
+        from django.utils import timezone
+
+        send_now = attrs.get('send_now', False)
+        scheduled_at = attrs.get('scheduled_at')
+
+        if send_now:
+            attrs['scheduled_at'] = timezone.now()
+            return attrs
+
+        if scheduled_at is None:
+            raise serializers.ValidationError({'scheduled_at': 'This field is required unless send_now is true.'})
+        if scheduled_at < timezone.now():
+            raise serializers.ValidationError({'scheduled_at': 'Schedule time cannot be in the past.'})
+        return attrs
 
 
 # ─────────────────────────── Stats ───────────────────────────

@@ -1,6 +1,7 @@
 from django.contrib.auth import get_user_model
 from django.db.models import Count, Q
 from django.utils import timezone
+from celery import current_app
 from rest_framework import status
 from rest_framework.decorators import action
 from rest_framework.pagination import PageNumberPagination
@@ -13,8 +14,12 @@ from kakebe_apps.imagehandler.models import ImageAsset
 from kakebe_apps.listings.models import Listing
 from kakebe_apps.merchants.models import Merchant
 from kakebe_apps.orders.models import OrderIntent
+from kakebe_apps.notifications.models import BroadcastNotificationCampaign
+from kakebe_apps.notifications.tasks import send_broadcast_campaign
 from .permissions import IsStaffUser
 from .serializers import (
+    AdminBroadcastCampaignCreateSerializer,
+    AdminBroadcastCampaignSerializer,
     AdminCategorySerializer,
     AdminCategoryUpdateSerializer,
     AdminImageAssetSerializer,
@@ -692,3 +697,137 @@ class AdminImageViewSet(ViewSet):
         count = abandoned.count()
         abandoned.delete()
         return Response({'success': True, 'message': f'Deleted {count} orphan image(s)'})
+
+
+class AdminBroadcastCampaignViewSet(ViewSet):
+    """
+    Staff-only scheduled broadcasts.
+
+    GET  /api/v1/admin/broadcasts/                 - list campaigns
+    GET  /api/v1/admin/broadcasts/{id}/            - retrieve campaign
+    POST /api/v1/admin/broadcasts/                 - schedule email or push
+    POST /api/v1/admin/broadcasts/schedule-email/  - schedule email to all active users
+    POST /api/v1/admin/broadcasts/schedule-push/   - schedule push to all active users with push tokens
+    POST /api/v1/admin/broadcasts/{id}/cancel/     - cancel a scheduled campaign
+    """
+
+    permission_classes = [IsStaffUser]
+    pagination_class = AdminPagination
+
+    def _get_queryset(self):
+        return BroadcastNotificationCampaign.objects.select_related('created_by').order_by(
+            '-scheduled_at', '-created_at'
+        )
+
+    def _eligible_count(self, channel):
+        if channel == 'EMAIL':
+            return User.objects.filter(is_active=True).exclude(email__isnull=True).exclude(email='').count()
+        if channel == 'PUSH':
+            return User.objects.filter(is_active=True, push_tokens__is_active=True).distinct().count()
+        return 0
+
+    def _schedule_campaign(self, campaign):
+        task = send_broadcast_campaign.apply_async(
+            args=[str(campaign.id)],
+            eta=campaign.scheduled_at,
+        )
+        campaign.celery_task_id = task.id
+        campaign.target_count = self._eligible_count(campaign.channel)
+        campaign.save(update_fields=['celery_task_id', 'target_count', 'updated_at'])
+        return campaign
+
+    def list(self, request):
+        qs = self._get_queryset()
+
+        channel = request.query_params.get('channel', '').strip().upper()
+        if channel:
+            qs = qs.filter(channel=channel)
+
+        campaign_status = request.query_params.get('status', '').strip().upper()
+        if campaign_status:
+            qs = qs.filter(status=campaign_status)
+
+        paginator = self.pagination_class()
+        page = paginator.paginate_queryset(qs, request)
+        if page is not None:
+            return paginator.get_paginated_response(AdminBroadcastCampaignSerializer(page, many=True).data)
+        return Response({'success': True, 'data': AdminBroadcastCampaignSerializer(qs, many=True).data})
+
+    def retrieve(self, request, pk=None):
+        try:
+            campaign = self._get_queryset().get(pk=pk)
+        except BroadcastNotificationCampaign.DoesNotExist:
+            return Response({'success': False, 'error': 'Broadcast campaign not found'}, status=status.HTTP_404_NOT_FOUND)
+        return Response({'success': True, 'data': AdminBroadcastCampaignSerializer(campaign).data})
+
+    def create(self, request):
+        serializer = AdminBroadcastCampaignCreateSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        campaign = serializer.save(created_by=request.user)
+        campaign = self._schedule_campaign(campaign)
+        return Response(
+            {
+                'success': True,
+                'message': f'{campaign.get_channel_display()} broadcast scheduled',
+                'data': AdminBroadcastCampaignSerializer(campaign).data,
+            },
+            status=status.HTTP_201_CREATED,
+        )
+
+    @action(detail=False, methods=['post'], url_path='schedule-email')
+    def schedule_email(self, request):
+        data = request.data.copy()
+        data['channel'] = 'EMAIL'
+        serializer = AdminBroadcastCampaignCreateSerializer(data=data)
+        serializer.is_valid(raise_exception=True)
+        campaign = serializer.save(created_by=request.user)
+        campaign = self._schedule_campaign(campaign)
+        return Response(
+            {
+                'success': True,
+                'message': 'Email broadcast scheduled',
+                'data': AdminBroadcastCampaignSerializer(campaign).data,
+            },
+            status=status.HTTP_201_CREATED,
+        )
+
+    @action(detail=False, methods=['post'], url_path='schedule-push')
+    def schedule_push(self, request):
+        data = request.data.copy()
+        data['channel'] = 'PUSH'
+        serializer = AdminBroadcastCampaignCreateSerializer(data=data)
+        serializer.is_valid(raise_exception=True)
+        campaign = serializer.save(created_by=request.user)
+        campaign = self._schedule_campaign(campaign)
+        return Response(
+            {
+                'success': True,
+                'message': 'Push broadcast scheduled',
+                'data': AdminBroadcastCampaignSerializer(campaign).data,
+            },
+            status=status.HTTP_201_CREATED,
+        )
+
+    @action(detail=True, methods=['post'])
+    def cancel(self, request, pk=None):
+        try:
+            campaign = BroadcastNotificationCampaign.objects.get(pk=pk)
+        except BroadcastNotificationCampaign.DoesNotExist:
+            return Response({'success': False, 'error': 'Broadcast campaign not found'}, status=status.HTTP_404_NOT_FOUND)
+
+        if campaign.status != 'SCHEDULED':
+            return Response(
+                {'success': False, 'error': f'Cannot cancel a campaign with status {campaign.status}'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        if campaign.celery_task_id:
+            current_app.control.revoke(campaign.celery_task_id)
+
+        campaign.status = 'CANCELLED'
+        campaign.save(update_fields=['status', 'updated_at'])
+        return Response({
+            'success': True,
+            'message': 'Broadcast campaign cancelled',
+            'data': AdminBroadcastCampaignSerializer(campaign).data,
+        })

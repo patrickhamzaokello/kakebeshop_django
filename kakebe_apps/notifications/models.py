@@ -24,6 +24,7 @@ class NotificationType(models.TextChoices):
     LISTING_REJECTED = 'LISTING_REJECTED', 'Listing Rejected'
 
     CHAT_MESSAGE = 'CHAT_MESSAGE', 'Chat Message'
+    ADMIN_BROADCAST = 'ADMIN_BROADCAST', 'Admin Broadcast'
 
 
 class NotificationChannel(models.TextChoices):
@@ -197,3 +198,56 @@ class UserNotificationPreference(models.Model):
         if token in self.device_tokens:
             self.device_tokens.remove(token)
             self.save(update_fields=['device_tokens'])
+
+
+class BroadcastNotificationCampaign(models.Model):
+    """Admin-scheduled broadcast notification or email campaign."""
+
+    CHANNEL_CHOICES = [
+        ('EMAIL', 'Email'),
+        ('PUSH', 'Push Notification'),
+    ]
+
+    STATUS_CHOICES = [
+        ('SCHEDULED', 'Scheduled'),
+        ('SENDING', 'Sending'),
+        ('SENT', 'Sent'),
+        ('FAILED', 'Failed'),
+        ('CANCELLED', 'Cancelled'),
+    ]
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    channel = models.CharField(max_length=20, choices=CHANNEL_CHOICES, db_index=True)
+    title = models.CharField(max_length=255)
+    message = models.TextField()
+    metadata = models.JSONField(default=dict, blank=True)
+    scheduled_at = models.DateTimeField(db_index=True)
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='SCHEDULED', db_index=True)
+
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='created_broadcast_campaigns',
+    )
+    celery_task_id = models.CharField(max_length=255, blank=True)
+    target_count = models.PositiveIntegerField(default=0)
+    notification_count = models.PositiveIntegerField(default=0)
+    error_message = models.TextField(blank=True)
+
+    sent_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = 'broadcast_notification_campaigns'
+        ordering = ['-scheduled_at', '-created_at']
+        indexes = [
+            models.Index(fields=['status', 'scheduled_at']),
+            models.Index(fields=['channel', 'status']),
+            models.Index(fields=['created_by']),
+        ]
+
+    def __str__(self):
+        return f"{self.channel} broadcast: {self.title}"

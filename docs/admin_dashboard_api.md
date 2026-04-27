@@ -20,6 +20,7 @@ Authorization: Bearer <access_token>
 - [Category Management](#5-category-management)
 - [Order Management](#6-order-management)
 - [Image Management](#7-image-management)
+- [Broadcast Notifications](#8-broadcast-notifications)
 
 ---
 
@@ -893,3 +894,88 @@ Delete orphan images older than 24 hours.
   "message": "Deleted 5 orphan image(s)"
 }
 ```
+
+---
+
+## 8. Broadcast Notifications
+
+Admin endpoints for scheduling push notifications or emails to all eligible active users.
+
+### GET `/api/v1/admin/broadcasts/`
+
+List scheduled and sent broadcast campaigns.
+
+**Query Parameters**
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `channel` | string | Filter by `EMAIL` or `PUSH` |
+| `status` | string | Filter by `SCHEDULED`, `SENDING`, `SENT`, `FAILED`, or `CANCELLED` |
+| `page` | integer | Page number |
+| `page_size` | integer | Items per page |
+
+### POST `/api/v1/admin/broadcasts/schedule-email/`
+
+Schedule an email broadcast to all active users with email addresses.
+
+```json
+{
+  "title": "Weekend deals",
+  "message": "New offers are live on Kakebe Shop.",
+  "scheduled_at": "2026-04-27T12:00:00Z",
+  "metadata": {
+    "campaign": "weekend_deals"
+  }
+}
+```
+
+Use `"send_now": true` instead of `scheduled_at` to queue immediately.
+
+### POST `/api/v1/admin/broadcasts/schedule-push/`
+
+Schedule a push broadcast to all active users with active push tokens.
+
+```json
+{
+  "title": "Price drops nearby",
+  "message": "Check fresh listings from merchants near you.",
+  "send_now": true
+}
+```
+
+### POST `/api/v1/admin/broadcasts/`
+
+Generic scheduler. Include `channel` as `EMAIL` or `PUSH`.
+
+```json
+{
+  "channel": "PUSH",
+  "title": "New arrivals",
+  "message": "Fresh listings just landed.",
+  "scheduled_at": "2026-04-27T12:00:00Z"
+}
+```
+
+**Response `201`**
+
+```json
+{
+  "success": true,
+  "message": "Push broadcast scheduled",
+  "data": {
+    "id": "uuid",
+    "channel": "PUSH",
+    "title": "New arrivals",
+    "message": "Fresh listings just landed.",
+    "scheduled_at": "2026-04-27T12:00:00Z",
+    "status": "SCHEDULED",
+    "target_count": 120,
+    "notification_count": 0,
+    "celery_task_id": "celery-task-id"
+  }
+}
+```
+
+### POST `/api/v1/admin/broadcasts/{id}/cancel/`
+
+Cancel a campaign that is still `SCHEDULED`.
