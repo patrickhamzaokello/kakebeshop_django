@@ -110,11 +110,25 @@ class MerchantViewSet(viewsets.ViewSet):
             serializer = MerchantListSerializer(
                 page, many=True, context={'request': request}
             )
+            if request.user.is_authenticated:
+                analytics.merchant_list_viewed(
+                    request.user.id,
+                    results_count=paginator.page.paginator.count,
+                    search=search,
+                    filters={'min_rating': min_rating, 'location_id': location_id, 'sort_by': sort_by},
+                )
             return paginator.get_paginated_response(serializer.data)
 
         serializer = MerchantListSerializer(
             queryset, many=True, context={'request': request}
         )
+        if request.user.is_authenticated:
+            analytics.merchant_list_viewed(
+                request.user.id,
+                results_count=queryset.count(),
+                search=search,
+                filters={'min_rating': min_rating, 'location_id': location_id, 'sort_by': sort_by},
+            )
         return Response(serializer.data)
 
     def _validate_uuid(self, pk):
@@ -133,6 +147,8 @@ class MerchantViewSet(viewsets.ViewSet):
         if (error := self._validate_uuid(pk)):
             return error
         merchant = get_object_or_404(self.get_queryset(), pk=pk)
+        if request.user.is_authenticated:
+            analytics.merchant_viewed(request.user.id, merchant, source='detail')
         serializer = MerchantDetailSerializer(merchant, context={'request': request})
         return Response(serializer.data)
 
@@ -225,11 +241,25 @@ class MerchantViewSet(viewsets.ViewSet):
             serializer = ListingListSerializer(
                 page, many=True, context={'request': request}
             )
+            if request.user.is_authenticated:
+                analytics.merchant_listings_viewed(
+                    request.user.id,
+                    merchant,
+                    paginator.page.paginator.count,
+                    filters={'listing_type': listing_type, 'sort_by': sort_by},
+                )
             return paginator.get_paginated_response(serializer.data)
 
         serializer = ListingListSerializer(
             queryset, many=True, context={'request': request}
         )
+        if request.user.is_authenticated:
+            analytics.merchant_listings_viewed(
+                request.user.id,
+                merchant,
+                queryset.count(),
+                filters={'listing_type': listing_type, 'sort_by': sort_by},
+            )
         return Response(serializer.data)
 
     @action(detail=False, methods=['get'], permission_classes=[permissions.IsAuthenticated])
@@ -239,6 +269,7 @@ class MerchantViewSet(viewsets.ViewSet):
             # Allow user to see their own profile even if not verified
             merchant = Merchant.objects.get(user=request.user)
             serializer = MerchantDetailSerializer(merchant, context={'request': request})
+            analytics.merchant_viewed(request.user.id, merchant, source='me')
             return Response(serializer.data)
         except Merchant.DoesNotExist:
             return Response(
@@ -264,6 +295,8 @@ class MerchantViewSet(viewsets.ViewSet):
                 {'business_email': ['This business email is already in use by another merchant.']},
                 status=status.HTTP_400_BAD_REQUEST
             )
+
+        analytics.merchant_profile_updated(request.user.id, merchant, updated_fields=list(request.data.keys()))
 
         # Return full detail serializer
         return Response(
@@ -366,6 +399,7 @@ class MerchantViewSet(viewsets.ViewSet):
         asset = assets.filter(variant='medium').first() or assets.first()
         merchant.logo = asset.cdn_url()
         merchant.save(update_fields=['logo', 'updated_at'])
+        analytics.merchant_image_updated(request.user.id, merchant, image_type='logo')
 
         return Response(MerchantDetailSerializer(merchant, context={'request': request}).data)
 
@@ -406,6 +440,7 @@ class MerchantViewSet(viewsets.ViewSet):
         asset = assets.filter(variant='large').first() or assets.first()
         merchant.cover_image = asset.cdn_url()
         merchant.save(update_fields=['cover_image', 'updated_at'])
+        analytics.merchant_image_updated(request.user.id, merchant, image_type='cover_image')
 
         return Response(MerchantDetailSerializer(merchant, context={'request': request}).data)
 

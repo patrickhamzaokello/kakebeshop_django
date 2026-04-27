@@ -32,6 +32,7 @@ class CartViewSet(viewsets.ViewSet):
     def list(self, request):
         """Get user's cart with all items"""
         cart = self.get_or_create_cart(request.user)
+        analytics.cart_viewed(request.user.id, cart)
         serializer = CartSerializer(cart)
         return Response(serializer.data)
 
@@ -101,8 +102,13 @@ class CartViewSet(viewsets.ViewSet):
         cart = self.get_or_create_cart(request.user)
         cart_item = get_object_or_404(CartItem, id=item_id, cart=cart)
 
+        old_quantity = cart_item.quantity
         cart_item.quantity = serializer.validated_data['quantity']
         cart_item.save()
+
+        analytics.cart_item_quantity_updated(
+            request.user.id, cart_item, old_quantity, cart_item.quantity
+        )
 
         return Response({
             'message': 'Cart item updated',
@@ -175,9 +181,10 @@ class CartViewSet(viewsets.ViewSet):
     def clear(self, request):
         """Clear all items from cart"""
         cart = self.get_or_create_cart(request.user)
+        item_count = cart.items.count()
         cart.items.all().delete()
 
-        analytics.cart_cleared(request.user.id)
+        analytics.cart_cleared(request.user.id, cart=cart, item_count=item_count)
 
         return Response({
             'message': 'Cart cleared'
@@ -277,6 +284,7 @@ class WishlistViewSet(viewsets.ViewSet):
                 status=status.HTTP_404_NOT_FOUND
             )
 
+        analytics.wishlist_item_removed(request.user.id, wishlist_item.listing)
         wishlist_item.delete()
         return Response({'message': 'Item removed from wishlist'}, status=status.HTTP_204_NO_CONTENT)
 
@@ -286,6 +294,7 @@ class WishlistViewSet(viewsets.ViewSet):
         wishlist = self.get_or_create_wishlist(request.user)
         wishlist_item = get_object_or_404(WishlistItem, wishlist=wishlist, listing_id=listing_id)
 
+        analytics.wishlist_item_removed(request.user.id, wishlist_item.listing)
         wishlist_item.delete()
 
         return Response({

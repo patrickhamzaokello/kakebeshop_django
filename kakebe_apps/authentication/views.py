@@ -808,6 +808,7 @@ class UpdateProfileImageView(views.APIView):
             asset = assets.filter(variant='medium').first() or assets.first()
             user.profile_image = asset.cdn_url()
             user.save(update_fields=['profile_image', 'updated_at'])
+            analytics.profile_image_updated(user)
 
             return Response({
                 "success": True,
@@ -865,6 +866,7 @@ class UserProfileView(generics.RetrieveUpdateAPIView):
         try:
             user = self.get_object()
             serializer = self.get_serializer(user)
+            analytics.profile_viewed(user)
 
             return Response({
                 'success': True,
@@ -886,6 +888,7 @@ class UserProfileView(generics.RetrieveUpdateAPIView):
             serializer = self.get_serializer(user, data=request.data, partial=partial)
             serializer.is_valid(raise_exception=True)
             serializer.save()
+            analytics.profile_updated(user, updated_fields=list(request.data.keys()))
 
             return Response({
                 'success': True,

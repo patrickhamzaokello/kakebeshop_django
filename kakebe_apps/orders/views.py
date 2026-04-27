@@ -95,12 +95,19 @@ class OrderIntentViewSet(viewsets.ModelViewSet):
         orders = list(queryset)
         _attach_primary_images(orders)
         serializer = self.get_serializer(orders, many=True)
+        analytics.orders_viewed(
+            request.user.id,
+            role='all',
+            count=len(orders),
+            merchant_id=str(request.user.merchant_profile.id) if hasattr(request.user, 'merchant_profile') else None,
+        )
         return Response({'success': True, 'count': len(orders), 'data': serializer.data})
 
     def retrieve(self, request, *args, **kwargs):
         instance = self.get_object()
         _attach_primary_images([instance])
         serializer = self.get_serializer(instance)
+        analytics.order_detail_viewed(request.user.id, instance)
         return Response({'success': True, 'data': serializer.data})
 
     def get_queryset(self):
@@ -517,6 +524,12 @@ class OrderIntentViewSet(viewsets.ModelViewSet):
         orders = list(qs)
         _attach_primary_images(orders)
         serializer = self.get_serializer(orders, many=True)
+        analytics.orders_viewed(
+            request.user.id,
+            role='buyer',
+            count=len(orders),
+            status=order_status or None,
+        )
         return Response({
             'success': True,
             'count': len(orders),
@@ -581,6 +594,13 @@ class OrderIntentViewSet(viewsets.ModelViewSet):
         orders = list(qs)
         _attach_primary_images(orders)
         serializer = self.get_serializer(orders, many=True)
+        analytics.orders_viewed(
+            request.user.id,
+            role='merchant',
+            count=len(orders),
+            status=order_status or None,
+            merchant_id=str(request.user.merchant_profile.id),
+        )
         return Response({
             'success': True,
             'count': len(orders),
@@ -608,6 +628,13 @@ class OrderIntentViewSet(viewsets.ModelViewSet):
         orders = list(queryset)
         _attach_primary_images(orders)
         serializer = self.get_serializer(orders, many=True)
+        analytics.orders_viewed(
+            request.user.id,
+            role=role or 'all',
+            count=len(orders),
+            status=order_status.upper() if order_status else None,
+            merchant_id=str(request.user.merchant_profile.id) if role == 'merchant' and hasattr(request.user, 'merchant_profile') else None,
+        )
         return Response({
             'success': True,
             'count': len(orders),

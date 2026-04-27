@@ -206,6 +206,9 @@ class ConversationViewSet(viewsets.ReadOnlyModelViewSet):
             conversation.save(update_fields=['last_message_at', 'updated_at'])
             transaction.on_commit(lambda: self._create_message_notification(conversation, message))
 
+        analytics.conversation_started(request.user.id, conversation, message)
+        analytics.message_sent(request.user.id, conversation, message)
+
         read_serializer = ConversationSerializer(conversation, context=self.get_serializer_context())
         message_serializer = MessageSerializer(message, context=self.get_serializer_context())
         return Response({
@@ -241,6 +244,7 @@ class ConversationViewSet(viewsets.ReadOnlyModelViewSet):
                 conversation.save(update_fields=['last_message_at', 'updated_at'])
                 transaction.on_commit(lambda: self._create_message_notification(conversation, message))
 
+            analytics.message_sent(request.user.id, conversation, message)
             read_serializer = MessageSerializer(message, context=self.get_serializer_context())
             return Response({'success': True, 'message': read_serializer.data}, status=status.HTTP_201_CREATED)
 
@@ -262,6 +266,7 @@ class ConversationViewSet(viewsets.ReadOnlyModelViewSet):
             is_read=True,
             read_at=timezone.now(),
         )
+        analytics.messages_marked_read(request.user.id, conversation, updated)
         return Response({'success': True, 'marked_read': updated})
 
     @action(detail=False, methods=['get'], url_path='unread-count')
@@ -300,6 +305,7 @@ class MessageViewSet(mixins.CreateModelMixin,
         conversation.last_message_at = message.sent_at
         conversation.save(update_fields=['last_message_at', 'updated_at'])
         ConversationViewSet()._create_message_notification(conversation, message)
+        analytics.message_sent(self.request.user.id, conversation, message)
 
 
 

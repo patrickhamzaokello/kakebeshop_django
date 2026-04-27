@@ -740,6 +740,7 @@ class ListingViewSet(viewsets.ViewSet):
                 )
                 user_ip = request.META.get('REMOTE_ADDR', 'unknown')
                 contact_count = ListingService.increment_contacts(listing, user_ip)
+                analytics.listing_contacted(request.user.id, listing, source='owner_dashboard')
                 return Response({'contact_count': contact_count})
             except Listing.DoesNotExist:
                 pass
@@ -750,6 +751,8 @@ class ListingViewSet(viewsets.ViewSet):
 
         # Use service layer with rate limiting
         contact_count = ListingService.increment_contacts(listing, user_ip)
+        if request.user.is_authenticated:
+            analytics.listing_contacted(request.user.id, listing, source='public_listing')
 
         return Response({'contact_count': contact_count})
 
@@ -791,7 +794,11 @@ class ListingViewSet(viewsets.ViewSet):
             )
 
             if new_status == 'PENDING' and updated:
-                analytics.listing_submitted_for_review(request.user.id, count=updated)
+                analytics.listing_submitted_for_review(
+                    request.user.id,
+                    count=updated,
+                    merchant_id=str(request.user.merchant_profile.id),
+                )
 
             return Response({
                 'detail': f'{updated} listing(s) updated to {new_status}.',
