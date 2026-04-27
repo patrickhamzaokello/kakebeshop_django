@@ -901,6 +901,8 @@ Delete orphan images older than 24 hours.
 
 Admin endpoints for scheduling push notifications or emails to all eligible active users.
 
+Frontend implementation details are documented in `docs/admin_broadcast_frontend.md`.
+
 ### GET `/api/v1/admin/broadcasts/`
 
 List scheduled and sent broadcast campaigns.
