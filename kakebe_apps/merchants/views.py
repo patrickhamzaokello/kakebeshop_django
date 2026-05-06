@@ -248,6 +248,7 @@ class MerchantViewSet(viewsets.ViewSet):
         # Import here to avoid circular imports
         from kakebe_apps.listings.models import Listing
         from kakebe_apps.listings.serializers import ListingListSerializer
+        from kakebe_apps.listings.services import ListingService
 
         queryset = Listing.objects.filter(
             merchant=merchant,
@@ -258,6 +259,7 @@ class MerchantViewSet(viewsets.ViewSet):
             merchant__verified=True,
             merchant__deleted_at__isnull=True,
         ).select_related('merchant', 'category')
+        queryset = ListingService.apply_current_availability_filter(queryset)
 
         # Filter by listing type
         listing_type = request.query_params.get('listing_type', None)

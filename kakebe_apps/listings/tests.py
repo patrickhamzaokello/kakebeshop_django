@@ -244,6 +244,51 @@ class ListingAPITestCase(APITestCase):
         detail_response = self.client.get(reverse('listing-detail', kwargs={'pk': hidden_listing.id}))
         self.assertEqual(detail_response.status_code, status.HTTP_404_NOT_FOUND)
 
+    def test_listings_outside_availability_window_are_hidden(self):
+        """Public listing reads only show currently available listings."""
+        future_listing = Listing.objects.create(
+            merchant=self.merchant,
+            title='Future Product',
+            description='Not available yet',
+            listing_type='PRODUCT',
+            category=self.category,
+            price_type='FIXED',
+            price=Decimal('100.00'),
+            status='ACTIVE',
+            is_verified=True,
+            is_home_feed_eligible=True,
+            quality_status='APPROVED',
+            available_from=timezone.now() + timezone.timedelta(days=1),
+        )
+        expired_listing = Listing.objects.create(
+            merchant=self.merchant,
+            title='Expired Product',
+            description='No longer available',
+            listing_type='PRODUCT',
+            category=self.category,
+            price_type='FIXED',
+            price=Decimal('100.00'),
+            status='ACTIVE',
+            is_verified=True,
+            is_home_feed_eligible=True,
+            quality_status='APPROVED',
+            available_until=timezone.now() - timezone.timedelta(minutes=1),
+        )
+
+        response = self.client.get(reverse('listing-list'))
+        titles = [item['title'] for item in response.data['results']]
+        self.assertNotIn('Future Product', titles)
+        self.assertNotIn('Expired Product', titles)
+
+        self.assertEqual(
+            self.client.get(reverse('listing-detail', kwargs={'pk': future_listing.id})).status_code,
+            status.HTTP_404_NOT_FOUND,
+        )
+        self.assertEqual(
+            self.client.get(reverse('listing-detail', kwargs={'pk': expired_listing.id})).status_code,
+            status.HTTP_404_NOT_FOUND,
+        )
+
     def test_list_listings_with_search(self):
         """Test listing search functionality"""
         url = reverse('listing-list')

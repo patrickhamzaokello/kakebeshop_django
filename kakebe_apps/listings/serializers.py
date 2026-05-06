@@ -71,6 +71,7 @@ class ListingListSerializer(serializers.ModelSerializer):
             'category_name', 'price_type',
             'price', 'price_min', 'price_max', 'currency',
             'is_featured', 'is_verified', 'views_count',
+            'available_from', 'available_until',
             'primary_image', 'delivery_modes', 'created_at'
         ]
 
@@ -102,7 +103,8 @@ class ListingDetailSerializer(serializers.ModelSerializer):
             'price_min', 'price_max', 'currency', 'is_price_negotiable',
             'status', 'rejection_reason', 'is_verified', 'verified_at',
             'is_featured', 'featured_until', 'views_count', 'contact_count',
-            'metadata', 'expires_at', 'created_at', 'updated_at',
+            'metadata', 'available_from', 'available_until',
+            'expires_at', 'created_at', 'updated_at',
             'business_hours', 'delivery_modes', 'is_active', 'images', 'share_url'
         ]
         read_only_fields = [
@@ -148,11 +150,19 @@ class ListingCreateSerializer(serializers.ModelSerializer):
             'price_type', 'price', 'price_min',
             'price_max', 'currency', 'is_price_negotiable',
             'tags', 'image_group_ids', 'business_hours_data',
-            'delivery_modes_data', 'metadata'
+            'delivery_modes_data', 'available_from', 'available_until',
+            'metadata'
         ]
 
     def validate(self, attrs):
         price_type = attrs.get('price_type')
+        available_from = attrs.get('available_from')
+        available_until = attrs.get('available_until')
+
+        if available_from and available_until and available_from > available_until:
+            raise serializers.ValidationError({
+                'available_until': 'Availability end must be after availability start.'
+            })
 
         if price_type == 'FIXED':
             if not attrs.get('price'):
@@ -297,7 +307,7 @@ class ListingUpdateSerializer(serializers.ModelSerializer):
             'title', 'description', 'listing_type', 'category',
             'price_type', 'price', 'price_min',
             'price_max', 'currency', 'is_price_negotiable',
-            'tags', 'metadata', 'status',
+            'tags', 'metadata', 'status', 'available_from', 'available_until',
             'add_image_group_ids', 'remove_image_group_ids',
             'add_delivery_modes', 'remove_delivery_modes',
         ]
@@ -315,6 +325,13 @@ class ListingUpdateSerializer(serializers.ModelSerializer):
                 raise serializers.ValidationError({
                     'status': f"You can only set status to {', '.join(allowed_statuses)}."
                 })
+
+        available_from = attrs.get('available_from', self.instance.available_from)
+        available_until = attrs.get('available_until', self.instance.available_until)
+        if available_from and available_until and available_from > available_until:
+            raise serializers.ValidationError({
+                'available_until': 'Availability end must be after availability start.'
+            })
 
         # Validate price consistency
         price_type = attrs.get('price_type', self.instance.price_type)
@@ -497,6 +514,7 @@ class MyListingSerializer(serializers.ModelSerializer):
             'category_name', 'price_type', 'price', 'price_min',
             'price_max', 'currency', 'status', 'is_featured',
             'is_verified', 'views_count', 'contact_count',
+            'available_from', 'available_until',
             'primary_image', 'created_at', 'updated_at',
         ]
 

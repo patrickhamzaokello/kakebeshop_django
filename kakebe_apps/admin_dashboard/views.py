@@ -403,6 +403,22 @@ class AdminListingViewSet(ViewSet):
             )
             qs = qs.filter(active_pin_filter) if has_active_pin.lower() == 'true' else qs.exclude(active_pin_filter)
 
+        availability = request.query_params.get('availability', '').strip().lower()
+        if availability:
+            now = timezone.now()
+            current_filter = (
+                (Q(available_from__isnull=True) | Q(available_from__lte=now))
+                & (Q(available_until__isnull=True) | Q(available_until__gte=now))
+            )
+            if availability == 'current':
+                qs = qs.filter(current_filter)
+            elif availability == 'scheduled':
+                qs = qs.filter(available_from__gt=now)
+            elif availability == 'expired':
+                qs = qs.filter(available_until__lt=now)
+            elif availability == 'always':
+                qs = qs.filter(available_from__isnull=True, available_until__isnull=True)
+
         paginator = self.pagination_class()
         page = paginator.paginate_queryset(qs, request)
         if page is not None:

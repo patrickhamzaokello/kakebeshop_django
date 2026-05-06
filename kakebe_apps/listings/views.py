@@ -105,7 +105,7 @@ class ListingViewSet(viewsets.ViewSet):
         Optimized base queryset for verified, active listings.
         Uses select_related and prefetch_related to minimize database queries.
         """
-        return Listing.objects.filter(
+        queryset = Listing.objects.filter(
             status='ACTIVE',
             is_verified=True,
             deleted_at__isnull=True,
@@ -120,6 +120,7 @@ class ListingViewSet(viewsets.ViewSet):
             'tags',
             'delivery_modes',
         )
+        return ListingService.apply_current_availability_filter(queryset)
 
     def list(self, request):
         """List verified and active listings with filtering and search"""

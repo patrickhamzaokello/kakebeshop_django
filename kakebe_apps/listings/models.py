@@ -133,6 +133,10 @@ class Listing(models.Model):
     # Additional data
     metadata = models.JSONField(null=True, blank=True)
 
+    # Public availability window. Null boundaries mean open-ended availability.
+    available_from = models.DateTimeField(null=True, blank=True, db_index=True)
+    available_until = models.DateTimeField(null=True, blank=True, db_index=True)
+
     # Timestamps
     expires_at = models.DateTimeField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True, db_index=True)
@@ -149,6 +153,7 @@ class Listing(models.Model):
             models.Index(fields=['is_home_feed_eligible', 'quality_status', 'status'], name='listings_is_home_6af4d2_idx'),
             models.Index(fields=['is_home_feed_pinned', 'home_feed_pin_position'], name='listings_is_home_221b7e_idx'),
             models.Index(fields=['feed_rank_boost'], name='listings_feed_ra_8e2c0b_idx'),
+            models.Index(fields=['available_from', 'available_until'], name='listings_avail_8b18f4_idx'),
             models.Index(fields=['-created_at']),
             models.Index(fields=['listing_type', 'status']),
         ]
@@ -167,7 +172,17 @@ class Listing(models.Model):
                 and self.merchant.verified
                 and self.merchant.deleted_at is None
                 and self.deleted_at is None
+                and self.is_currently_available
         )
+
+    @property
+    def is_currently_available(self):
+        """Unset availability bounds mean the listing is available."""
+        from django.utils import timezone
+        now = timezone.now()
+        starts_ok = self.available_from is None or self.available_from <= now
+        ends_ok = self.available_until is None or self.available_until >= now
+        return starts_ok and ends_ok
 
     @property
     def primary_image(self):

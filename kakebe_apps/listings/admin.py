@@ -24,7 +24,8 @@ class ListingAdmin(admin.ModelAdmin):
         ('merchant', admin.RelatedOnlyFieldListFilter),
         'listing_type', 'status', 'is_verified', 'is_featured',
         'quality_status', 'is_home_feed_eligible', 'is_home_feed_pinned',
-        'merchant__verified', 'category', 'price_type', 'created_at'
+        'merchant__verified', 'category', 'price_type',
+        'available_from', 'available_until', 'created_at'
     ]
     search_fields = [
         'title', 'description', 'merchant__display_name',
@@ -78,7 +79,7 @@ class ListingAdmin(admin.ModelAdmin):
             'fields': ('views_count', 'contact_count')
         }),
         ('Additional Info', {
-            'fields': ('metadata', 'expires_at'),
+            'fields': ('metadata', 'available_from', 'available_until', 'expires_at'),
             'classes': ('collapse',)
         }),
         ('Timestamps', {

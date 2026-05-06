@@ -394,6 +394,7 @@ List all listings (any status) with optional search and filtering.
 | `is_home_feed_pinned` | boolean | Filter by pinned home feed status (`true`/`false`)       |
 | `has_feed_boost` | boolean | Filter listings with `feed_rank_boost > 0` (`true`) or no boost (`false`) |
 | `has_active_pin` | boolean | Filter listings with a non-expired home feed pin (`true`/`false`) |
+| `availability` | string | Filter by availability window (`current`, `scheduled`, `expired`, `always`) |
 | `page`        | integer | Page number (default: `1`)                                       |
 | `page_size`   | integer | Items per page (default: `20`, max: `100`)                       |
 
@@ -436,6 +437,8 @@ List all listings (any status) with optional search and filtering.
       "is_home_feed_pinned": false,
       "home_feed_pin_position": null,
       "home_feed_pin_until": null,
+      "available_from": null,
+      "available_until": null,
       "views_count": 0,
       "contact_count": 0,
       "created_at": "2024-01-01T00:00:00Z",
@@ -484,7 +487,9 @@ Update listing fields.
   "feed_boost_reason": "Seasonal campaign",
   "is_home_feed_pinned": false,
   "home_feed_pin_position": null,
-  "home_feed_pin_until": null
+  "home_feed_pin_until": null,
+  "available_from": "2024-01-01T08:00:00Z",
+  "available_until": "2024-01-31T17:00:00Z"
 }
 ```
 

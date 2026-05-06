@@ -33,6 +33,7 @@ from rest_framework import status
 from rest_framework.pagination import PageNumberPagination
 
 from kakebe_apps.listings.models import Listing
+from kakebe_apps.listings.services import ListingService
 from kakebe_apps.merchants.models import Merchant
 from kakebe_apps.orders.models import OrderIntent
 from kakebe_apps.analytics import events as analytics
@@ -104,6 +105,8 @@ class ConversationViewSet(viewsets.ReadOnlyModelViewSet):
                 merchant__verified=True,
                 merchant__deleted_at__isnull=True,
             )
+            if not listing.is_currently_available:
+                raise ValueError("This listing is not currently available.")
             if merchant and merchant.id != listing.merchant_id:
                 raise ValueError("listing_id does not match the order merchant.")
             merchant = listing.merchant
@@ -919,6 +922,10 @@ class ListingCommentViewSet(viewsets.ModelViewSet):
                     listing__merchant__verified=True,
                     listing__merchant__deleted_at__isnull=True,
                 )
+                .filter(
+                    Q(listing__available_from__isnull=True) | Q(listing__available_from__lte=timezone.now()),
+                    Q(listing__available_until__isnull=True) | Q(listing__available_until__gte=timezone.now()),
+                )
                 .select_related('user')
                 .prefetch_related('replies')
             )
@@ -929,7 +936,7 @@ class ListingCommentViewSet(viewsets.ModelViewSet):
         listing_id = self.kwargs.get('listing_id')
         if listing_id:
             listing = get_object_or_404(
-                Listing,
+                ListingService.apply_current_availability_filter(Listing.objects.all()),
                 id=listing_id,
                 status='ACTIVE',
                 deleted_at__isnull=True,
@@ -994,7 +1001,7 @@ class ListingCommentViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_400_BAD_REQUEST,
             )
         listing = get_object_or_404(
-            Listing,
+            ListingService.apply_current_availability_filter(Listing.objects.all()),
             id=lid,
             status='ACTIVE',
             deleted_at__isnull=True,
@@ -1233,6 +1240,7 @@ class EnhancedSearchView(APIView):
             merchant__verified=True,
             merchant__deleted_at__isnull=True,
         )
+        listings = ListingService.apply_current_availability_filter(listings)
 
         # Category filter
         if category_id:

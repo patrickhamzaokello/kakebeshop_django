@@ -79,6 +79,7 @@ class AdminListingSerializer(serializers.ModelSerializer):
             'quality_rejection_reason', 'feed_rank_boost', 'feed_boost_until',
             'feed_boost_reason', 'is_home_feed_pinned',
             'home_feed_pin_position', 'home_feed_pin_until',
+            'available_from', 'available_until',
             'created_at', 'updated_at', 'deleted_at',
         ]
         read_only_fields = [
@@ -98,6 +99,7 @@ class AdminListingUpdateSerializer(serializers.ModelSerializer):
             'quality_rejection_reason', 'feed_rank_boost', 'feed_boost_until',
             'feed_boost_reason', 'is_home_feed_pinned',
             'home_feed_pin_position', 'home_feed_pin_until',
+            'available_from', 'available_until',
         ]
 
     def validate(self, attrs):
@@ -105,7 +107,13 @@ class AdminListingUpdateSerializer(serializers.ModelSerializer):
         is_eligible = attrs.get('is_home_feed_eligible', getattr(self.instance, 'is_home_feed_eligible', False))
         is_pinned = attrs.get('is_home_feed_pinned', getattr(self.instance, 'is_home_feed_pinned', False))
         pin_position = attrs.get('home_feed_pin_position', getattr(self.instance, 'home_feed_pin_position', None))
+        available_from = attrs.get('available_from', getattr(self.instance, 'available_from', None))
+        available_until = attrs.get('available_until', getattr(self.instance, 'available_until', None))
 
+        if available_from and available_until and available_from > available_until:
+            raise serializers.ValidationError({
+                'available_until': 'Availability end must be after availability start.'
+            })
         if is_eligible and quality_status != 'APPROVED':
             raise serializers.ValidationError({
                 'is_home_feed_eligible': 'Listing must have quality_status=APPROVED to be home-feed eligible.'

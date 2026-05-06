@@ -28,6 +28,15 @@ class ListingService:
     """Service class for Listing business logic"""
 
     @staticmethod
+    def apply_current_availability_filter(queryset):
+        """Only include listings whose optional availability window includes now."""
+        now = timezone.now()
+        return queryset.filter(
+            Q(available_from__isnull=True) | Q(available_from__lte=now),
+            Q(available_until__isnull=True) | Q(available_until__gte=now),
+        )
+
+    @staticmethod
     def apply_home_feed_ranking(queryset):
         """
         Apply the default home feed quality gate and ranking.
@@ -42,6 +51,7 @@ class ListingService:
         active_window = Q(feed_boost_until__isnull=True) | Q(feed_boost_until__gt=now)
         active_pin_window = Q(home_feed_pin_until__isnull=True) | Q(home_feed_pin_until__gt=now)
 
+        queryset = ListingService.apply_current_availability_filter(queryset)
         return queryset.filter(
             is_home_feed_eligible=True,
             quality_status='APPROVED',
@@ -606,6 +616,7 @@ class ListingService:
             'merchant__user',
             'category'
         ).prefetch_related('tags')
+        queryset = ListingService.apply_current_availability_filter(queryset)
 
         # Exclude current listing if requested
         if exclude_current:
@@ -700,6 +711,7 @@ class ListingService:
             'merchant__user',
             'category'
         ).prefetch_related('tags')
+        base_queryset = ListingService.apply_current_availability_filter(base_queryset)
 
         # Exclude current listing and same merchant if requested
         if exclude_current:
@@ -864,7 +876,7 @@ class ListingService:
         # For now, return popular listings
         # TODO: Implement based on user viewing history, purchases, etc.
 
-        return Listing.objects.filter(
+        queryset = Listing.objects.filter(
             status='ACTIVE',
             is_verified=True,
             deleted_at__isnull=True,
@@ -874,7 +886,10 @@ class ListingService:
         ).select_related(
             'merchant',
             'category'
-        ).order_by('-views_count', '-is_featured')[:limit]
+        )
+        return ListingService.apply_current_availability_filter(queryset).order_by(
+            '-views_count', '-is_featured'
+        )[:limit]
 
 
 # Helper function to safely convert to Decimal

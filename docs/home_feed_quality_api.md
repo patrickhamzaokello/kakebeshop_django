@@ -9,8 +9,17 @@ When `sort_by` is not supplied, the endpoint returns only listings that are:
 - `status=ACTIVE`
 - `is_verified=true`
 - merchant is verified
+- merchant is active
+- the current time is inside the listing availability window
 - `is_home_feed_eligible=true`
 - `quality_status=APPROVED`
+
+Availability window fields:
+
+- `available_from`: optional datetime. If unset, the listing can appear immediately.
+- `available_until`: optional datetime. If unset, the listing has no scheduled end.
+
+Listings with no availability fields set are treated as always available.
 
 Default ranking:
 
