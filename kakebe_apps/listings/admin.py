@@ -17,10 +17,12 @@ class ListingAdmin(admin.ModelAdmin):
     list_display = [
         'title', 'merchant', 'listing_type', 'category','status',
         'status_display', 'verified_display', 'featured_display',
-        'price_display', 'views_count', 'created_at'
+        'quality_status', 'is_home_feed_eligible', 'feed_rank_boost',
+        'is_home_feed_pinned', 'price_display', 'views_count', 'created_at'
     ]
     list_filter = [
         'listing_type', 'status', 'is_verified', 'is_featured',
+        'quality_status', 'is_home_feed_eligible', 'is_home_feed_pinned',
         'category', 'created_at'
     ]
     search_fields = [
@@ -57,6 +59,19 @@ class ListingAdmin(admin.ModelAdmin):
                 'is_featured', 'featured_until', 'featured_order'
             ),
             'description': 'Featured listings appear on the homepage. Lower order numbers appear first.'
+        }),
+        ('Home Feed Quality', {
+            'fields': (
+                'is_home_feed_eligible', 'quality_status',
+                'quality_score', 'quality_rejection_reason'
+            )
+        }),
+        ('Home Feed Ranking', {
+            'fields': (
+                'feed_rank_boost', 'feed_boost_until', 'feed_boost_reason',
+                'is_home_feed_pinned', 'home_feed_pin_position',
+                'home_feed_pin_until'
+            )
         }),
         ('Engagement Metrics', {
             'fields': ('views_count', 'contact_count')
@@ -134,6 +149,9 @@ class ListingAdmin(admin.ModelAdmin):
         'reject_listings',
         'feature_listings',
         'unfeature_listings',
+        'approve_quality',
+        'reject_quality',
+        'clear_home_feed_pins',
         'close_listings'
     ]
 
@@ -236,6 +254,54 @@ class ListingAdmin(admin.ModelAdmin):
         )
 
     unfeature_listings.short_description = 'Remove from featured'
+
+    def approve_quality(self, request, queryset):
+        """Approve selected listings for the home feed."""
+        updated = queryset.filter(status='ACTIVE', is_verified=True).update(
+            quality_status='APPROVED',
+            is_home_feed_eligible=True,
+            quality_rejection_reason=None,
+            updated_at=timezone.now(),
+        )
+        self.message_user(
+            request,
+            f'{updated} listing(s) approved for the home feed.',
+            level='SUCCESS',
+        )
+
+    approve_quality.short_description = 'Approve quality for home feed'
+
+    def reject_quality(self, request, queryset):
+        """Remove selected listings from the home feed."""
+        updated = queryset.update(
+            quality_status='REJECTED',
+            is_home_feed_eligible=False,
+            is_home_feed_pinned=False,
+            updated_at=timezone.now(),
+        )
+        self.message_user(
+            request,
+            f'{updated} listing(s) removed from the home feed.',
+            level='WARNING',
+        )
+
+    reject_quality.short_description = 'Reject quality / remove from home feed'
+
+    def clear_home_feed_pins(self, request, queryset):
+        """Clear home feed pin settings."""
+        updated = queryset.update(
+            is_home_feed_pinned=False,
+            home_feed_pin_position=None,
+            home_feed_pin_until=None,
+            updated_at=timezone.now(),
+        )
+        self.message_user(
+            request,
+            f'{updated} listing pin(s) cleared.',
+            level='INFO',
+        )
+
+    clear_home_feed_pins.short_description = 'Clear home feed pins'
 
     def close_listings(self, request, queryset):
         """Close selected listings."""

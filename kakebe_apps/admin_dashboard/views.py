@@ -24,6 +24,10 @@ from .serializers import (
     AdminCategoryUpdateSerializer,
     AdminImageAssetSerializer,
     AdminListingSerializer,
+    AdminListingFeedBoostSerializer,
+    AdminListingHomeFeedPinSerializer,
+    AdminListingQualityApproveSerializer,
+    AdminListingQualityRejectSerializer,
     AdminListingUpdateSerializer,
     AdminMerchantSerializer,
     AdminMerchantUpdateSerializer,
@@ -303,6 +307,11 @@ class AdminListingViewSet(ViewSet):
     POST   /api/v1/admin/listings/{id}/approve/  — set status=ACTIVE + is_verified=True
     POST   /api/v1/admin/listings/{id}/reject/   — set status=REJECTED
     POST   /api/v1/admin/listings/{id}/feature/  — toggle is_featured
+    POST   /api/v1/admin/listings/{id}/approve-quality/ — approve for home feed
+    POST   /api/v1/admin/listings/{id}/reject-quality/  — reject from home feed
+    POST   /api/v1/admin/listings/{id}/set-feed-boost/  — set rank boost
+    POST   /api/v1/admin/listings/{id}/pin-home-feed/   — pin to top feed slot
+    POST   /api/v1/admin/listings/{id}/unpin-home-feed/ — remove feed pin
     """
     permission_classes = [IsStaffUser]
     pagination_class = AdminPagination
@@ -311,6 +320,22 @@ class AdminListingViewSet(ViewSet):
         return Listing.objects.select_related(
             'merchant', 'category'
         ).filter(deleted_at__isnull=True).order_by('-created_at')
+
+    def _get_listing(self, pk):
+        try:
+            return Listing.objects.get(pk=pk, deleted_at__isnull=True)
+        except Listing.DoesNotExist:
+            return None
+
+    def _has_active_pin_conflict(self, listing, position):
+        now = timezone.now()
+        return Listing.objects.filter(
+            is_home_feed_pinned=True,
+            home_feed_pin_position=position,
+            deleted_at__isnull=True,
+        ).filter(
+            Q(home_feed_pin_until__isnull=True) | Q(home_feed_pin_until__gt=now)
+        ).exclude(pk=listing.pk).exists()
 
     def list(self, request):
         qs = self._get_base_qs()
@@ -339,6 +364,18 @@ class AdminListingViewSet(ViewSet):
         if is_verified is not None:
             qs = qs.filter(is_verified=is_verified.lower() == 'true')
 
+        quality_status = request.query_params.get('quality_status', '').strip().upper()
+        if quality_status:
+            qs = qs.filter(quality_status=quality_status)
+
+        is_home_feed_eligible = request.query_params.get('is_home_feed_eligible')
+        if is_home_feed_eligible is not None:
+            qs = qs.filter(is_home_feed_eligible=is_home_feed_eligible.lower() == 'true')
+
+        is_home_feed_pinned = request.query_params.get('is_home_feed_pinned')
+        if is_home_feed_pinned is not None:
+            qs = qs.filter(is_home_feed_pinned=is_home_feed_pinned.lower() == 'true')
+
         paginator = self.pagination_class()
         page = paginator.paginate_queryset(qs, request)
         if page is not None:
@@ -353,20 +390,25 @@ class AdminListingViewSet(ViewSet):
         return Response({'success': True, 'data': AdminListingSerializer(listing).data})
 
     def partial_update(self, request, pk=None):
-        try:
-            listing = Listing.objects.get(pk=pk, deleted_at__isnull=True)
-        except Listing.DoesNotExist:
+        listing = self._get_listing(pk)
+        if listing is None:
             return Response({'success': False, 'error': 'Listing not found'}, status=status.HTTP_404_NOT_FOUND)
 
         serializer = AdminListingUpdateSerializer(listing, data=request.data, partial=True)
         serializer.is_valid(raise_exception=True)
+        next_position = serializer.validated_data.get('home_feed_pin_position', listing.home_feed_pin_position)
+        next_is_pinned = serializer.validated_data.get('is_home_feed_pinned', listing.is_home_feed_pinned)
+        if next_is_pinned and self._has_active_pin_conflict(listing, next_position):
+            return Response(
+                {'success': False, 'error': f'Home feed pin position {next_position} is already occupied.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
         serializer.save()
         return Response({'success': True, 'data': AdminListingSerializer(listing).data})
 
     def destroy(self, request, pk=None):
-        try:
-            listing = Listing.objects.get(pk=pk, deleted_at__isnull=True)
-        except Listing.DoesNotExist:
+        listing = self._get_listing(pk)
+        if listing is None:
             return Response({'success': False, 'error': 'Listing not found'}, status=status.HTTP_404_NOT_FOUND)
         listing.deleted_at = timezone.now()
         listing.save(update_fields=['deleted_at'])
@@ -374,26 +416,30 @@ class AdminListingViewSet(ViewSet):
 
     @action(detail=True, methods=['post'])
     def approve(self, request, pk=None):
-        try:
-            listing = Listing.objects.get(pk=pk, deleted_at__isnull=True)
-        except Listing.DoesNotExist:
+        listing = self._get_listing(pk)
+        if listing is None:
             return Response({'success': False, 'error': 'Listing not found'}, status=status.HTTP_404_NOT_FOUND)
         listing.status = 'ACTIVE'
         listing.is_verified = True
-        listing.save(update_fields=['status', 'is_verified', 'updated_at'])
+        listing.verified_at = timezone.now()
+        listing.save(update_fields=['status', 'is_verified', 'verified_at', 'updated_at'])
         analytics.listing_approved(listing)
         return Response({'success': True, 'message': 'Listing approved', 'data': AdminListingSerializer(listing).data})
 
     @action(detail=True, methods=['post'])
     def reject(self, request, pk=None):
-        try:
-            listing = Listing.objects.get(pk=pk, deleted_at__isnull=True)
-        except Listing.DoesNotExist:
+        listing = self._get_listing(pk)
+        if listing is None:
             return Response({'success': False, 'error': 'Listing not found'}, status=status.HTTP_404_NOT_FOUND)
         reason = request.data.get('reason', '').strip()
         listing.status = 'REJECTED'
         listing.is_verified = False
-        listing.save(update_fields=['status', 'is_verified', 'updated_at'])
+        listing.is_home_feed_eligible = False
+        listing.is_home_feed_pinned = False
+        listing.save(update_fields=[
+            'status', 'is_verified', 'is_home_feed_eligible',
+            'is_home_feed_pinned', 'updated_at'
+        ])
         return Response({
             'success': True,
             'message': 'Listing rejected',
@@ -403,14 +449,128 @@ class AdminListingViewSet(ViewSet):
 
     @action(detail=True, methods=['post'])
     def feature(self, request, pk=None):
-        try:
-            listing = Listing.objects.get(pk=pk, deleted_at__isnull=True)
-        except Listing.DoesNotExist:
+        listing = self._get_listing(pk)
+        if listing is None:
             return Response({'success': False, 'error': 'Listing not found'}, status=status.HTTP_404_NOT_FOUND)
         listing.is_featured = not listing.is_featured
         listing.save(update_fields=['is_featured', 'updated_at'])
         state = 'featured' if listing.is_featured else 'unfeatured'
         return Response({'success': True, 'message': f'Listing {state}', 'data': AdminListingSerializer(listing).data})
+
+    @action(detail=True, methods=['post'], url_path='approve-quality')
+    def approve_quality(self, request, pk=None):
+        listing = self._get_listing(pk)
+        if listing is None:
+            return Response({'success': False, 'error': 'Listing not found'}, status=status.HTTP_404_NOT_FOUND)
+
+        serializer = AdminListingQualityApproveSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        listing.quality_status = 'APPROVED'
+        listing.is_home_feed_eligible = True
+        listing.quality_rejection_reason = None
+        if 'quality_score' in serializer.validated_data:
+            listing.quality_score = serializer.validated_data['quality_score']
+        listing.save(update_fields=[
+            'quality_status', 'is_home_feed_eligible',
+            'quality_rejection_reason', 'quality_score', 'updated_at'
+        ])
+        return Response({'success': True, 'message': 'Listing quality approved', 'data': AdminListingSerializer(listing).data})
+
+    @action(detail=True, methods=['post'], url_path='reject-quality')
+    def reject_quality(self, request, pk=None):
+        listing = self._get_listing(pk)
+        if listing is None:
+            return Response({'success': False, 'error': 'Listing not found'}, status=status.HTTP_404_NOT_FOUND)
+
+        serializer = AdminListingQualityRejectSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        listing.quality_status = 'REJECTED'
+        listing.is_home_feed_eligible = False
+        listing.quality_rejection_reason = serializer.validated_data['reason']
+        listing.is_home_feed_pinned = False
+        listing.home_feed_pin_position = None
+        listing.home_feed_pin_until = None
+        if 'quality_score' in serializer.validated_data:
+            listing.quality_score = serializer.validated_data['quality_score']
+        listing.save(update_fields=[
+            'quality_status', 'is_home_feed_eligible', 'quality_rejection_reason',
+            'is_home_feed_pinned', 'home_feed_pin_position', 'home_feed_pin_until',
+            'quality_score', 'updated_at'
+        ])
+        return Response({'success': True, 'message': 'Listing quality rejected', 'data': AdminListingSerializer(listing).data})
+
+    @action(detail=True, methods=['post'], url_path='mark-quality-review')
+    def mark_quality_review(self, request, pk=None):
+        listing = self._get_listing(pk)
+        if listing is None:
+            return Response({'success': False, 'error': 'Listing not found'}, status=status.HTTP_404_NOT_FOUND)
+        listing.quality_status = 'NEEDS_REVIEW'
+        listing.is_home_feed_eligible = False
+        listing.is_home_feed_pinned = False
+        listing.save(update_fields=[
+            'quality_status', 'is_home_feed_eligible',
+            'is_home_feed_pinned', 'updated_at'
+        ])
+        return Response({'success': True, 'message': 'Listing marked for quality review', 'data': AdminListingSerializer(listing).data})
+
+    @action(detail=True, methods=['post'], url_path='set-feed-boost')
+    def set_feed_boost(self, request, pk=None):
+        listing = self._get_listing(pk)
+        if listing is None:
+            return Response({'success': False, 'error': 'Listing not found'}, status=status.HTTP_404_NOT_FOUND)
+
+        serializer = AdminListingFeedBoostSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        listing.feed_rank_boost = serializer.validated_data['feed_rank_boost']
+        listing.feed_boost_until = serializer.validated_data.get('feed_boost_until')
+        listing.feed_boost_reason = serializer.validated_data.get('feed_boost_reason') or ''
+        listing.save(update_fields=[
+            'feed_rank_boost', 'feed_boost_until', 'feed_boost_reason', 'updated_at'
+        ])
+        return Response({'success': True, 'message': 'Listing feed boost updated', 'data': AdminListingSerializer(listing).data})
+
+    @action(detail=True, methods=['post'], url_path='pin-home-feed')
+    def pin_home_feed(self, request, pk=None):
+        listing = self._get_listing(pk)
+        if listing is None:
+            return Response({'success': False, 'error': 'Listing not found'}, status=status.HTTP_404_NOT_FOUND)
+        if listing.quality_status != 'APPROVED' or not listing.is_home_feed_eligible:
+            return Response(
+                {'success': False, 'error': 'Only approved, home-feed eligible listings can be pinned.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        serializer = AdminListingHomeFeedPinSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        position = serializer.validated_data['home_feed_pin_position']
+        if self._has_active_pin_conflict(listing, position):
+            return Response(
+                {'success': False, 'error': f'Home feed pin position {position} is already occupied.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        listing.is_home_feed_pinned = True
+        listing.home_feed_pin_position = position
+        listing.home_feed_pin_until = serializer.validated_data.get('home_feed_pin_until')
+        listing.save(update_fields=[
+            'is_home_feed_pinned', 'home_feed_pin_position',
+            'home_feed_pin_until', 'updated_at'
+        ])
+        return Response({'success': True, 'message': 'Listing pinned to home feed', 'data': AdminListingSerializer(listing).data})
+
+    @action(detail=True, methods=['post'], url_path='unpin-home-feed')
+    def unpin_home_feed(self, request, pk=None):
+        listing = self._get_listing(pk)
+        if listing is None:
+            return Response({'success': False, 'error': 'Listing not found'}, status=status.HTTP_404_NOT_FOUND)
+        listing.is_home_feed_pinned = False
+        listing.home_feed_pin_position = None
+        listing.home_feed_pin_until = None
+        listing.save(update_fields=[
+            'is_home_feed_pinned', 'home_feed_pin_position',
+            'home_feed_pin_until', 'updated_at'
+        ])
+        return Response({'success': True, 'message': 'Listing removed from home feed pins', 'data': AdminListingSerializer(listing).data})
 
 
 # ─────────────────────────── Categories ───────────────────────────

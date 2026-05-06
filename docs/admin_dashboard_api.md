@@ -385,6 +385,9 @@ List all listings (any status) with optional search and filtering.
 | `merchant_id` | uuid    | Filter by merchant ID                                            |
 | `category_id` | uuid    | Filter by category ID                                            |
 | `is_verified` | boolean | Filter by verification status (`true`/`false`)                   |
+| `quality_status` | string | Filter by quality status (`PENDING`, `APPROVED`, `REJECTED`, `NEEDS_REVIEW`) |
+| `is_home_feed_eligible` | boolean | Filter by home feed eligibility (`true`/`false`)        |
+| `is_home_feed_pinned` | boolean | Filter by pinned home feed status (`true`/`false`)       |
 | `page`        | integer | Page number (default: `1`)                                       |
 | `page_size`   | integer | Items per page (default: `20`, max: `100`)                       |
 
@@ -417,6 +420,16 @@ List all listings (any status) with optional search and filtering.
       "is_verified": true,
       "is_featured": false,
       "featured_until": "2024-01-01T00:00:00Z",
+      "is_home_feed_eligible": true,
+      "quality_status": "APPROVED",
+      "quality_score": "85.00",
+      "quality_rejection_reason": null,
+      "feed_rank_boost": 25,
+      "feed_boost_until": "2024-01-07T00:00:00Z",
+      "feed_boost_reason": "Seasonal campaign",
+      "is_home_feed_pinned": false,
+      "home_feed_pin_position": null,
+      "home_feed_pin_until": null,
       "views_count": 0,
       "contact_count": 0,
       "created_at": "2024-01-01T00:00:00Z",
@@ -455,7 +468,17 @@ Update listing fields.
   "status": "ACTIVE",
   "is_verified": true,
   "is_featured": false,
-  "featured_until": "2024-01-01T00:00:00Z"
+  "featured_until": "2024-01-01T00:00:00Z",
+  "is_home_feed_eligible": true,
+  "quality_status": "APPROVED",
+  "quality_score": "85.00",
+  "quality_rejection_reason": null,
+  "feed_rank_boost": 25,
+  "feed_boost_until": "2024-01-07T00:00:00Z",
+  "feed_boost_reason": "Seasonal campaign",
+  "is_home_feed_pinned": false,
+  "home_feed_pin_position": null,
+  "home_feed_pin_until": null
 }
 ```
 
@@ -528,6 +551,134 @@ Toggle listing featured status.
 {
   "success": true,
   "message": "Listing featured",
+  "data": { }
+}
+```
+
+---
+
+### POST `/api/v1/admin/listings/{id}/approve-quality/`
+
+Approve a listing for the home feed. This sets `quality_status=APPROVED`, `is_home_feed_eligible=true`, and clears `quality_rejection_reason`.
+
+**Request Body**
+```json
+{
+  "quality_score": "85.00"
+}
+```
+
+**Response `200`**
+```json
+{
+  "success": true,
+  "message": "Listing quality approved",
+  "data": { }
+}
+```
+
+---
+
+### POST `/api/v1/admin/listings/{id}/reject-quality/`
+
+Reject a listing from the home feed. This sets `quality_status=REJECTED`, `is_home_feed_eligible=false`, clears any active home feed pin, and stores the rejection reason.
+
+**Request Body**
+```json
+{
+  "reason": "Image quality is poor or inappropriate for the home feed.",
+  "quality_score": "20.00"
+}
+```
+
+**Response `200`**
+```json
+{
+  "success": true,
+  "message": "Listing quality rejected",
+  "data": { }
+}
+```
+
+---
+
+### POST `/api/v1/admin/listings/{id}/mark-quality-review/`
+
+Move a listing into manual review. This sets `quality_status=NEEDS_REVIEW`, removes home feed eligibility, and clears active pin status.
+
+**Request Body** — None
+
+**Response `200`**
+```json
+{
+  "success": true,
+  "message": "Listing marked for quality review",
+  "data": { }
+}
+```
+
+---
+
+### POST `/api/v1/admin/listings/{id}/set-feed-boost/`
+
+Set a ranking boost for an eligible listing. Boost values are `0` to `100`. Expired boosts remain stored but do not affect ranking.
+
+**Request Body**
+```json
+{
+  "feed_rank_boost": 40,
+  "feed_boost_until": "2024-01-07T00:00:00Z",
+  "feed_boost_reason": "Launch campaign"
+}
+```
+
+**Response `200`**
+```json
+{
+  "success": true,
+  "message": "Listing feed boost updated",
+  "data": { }
+}
+```
+
+---
+
+### POST `/api/v1/admin/listings/{id}/pin-home-feed/`
+
+Pin an approved, home-feed eligible listing above normal ranked results. Active pin positions must be unique.
+
+**Request Body**
+```json
+{
+  "home_feed_pin_position": 1,
+  "home_feed_pin_until": "2024-01-07T00:00:00Z"
+}
+```
+
+**Response `200`**
+```json
+{
+  "success": true,
+  "message": "Listing pinned to home feed",
+  "data": { }
+}
+```
+
+**Response `400`** — When the listing is not approved/eligible or the pin position is occupied.
+
+---
+
+### POST `/api/v1/admin/listings/{id}/unpin-home-feed/`
+
+Remove a listing from pinned home feed placement.
+
+**Request Body** — None
+
+**Response `200`**
+```json
+{
+  "success": true,
+  "message": "Listing removed from home feed pins",
   "data": { }
 }
 ```

@@ -11,7 +11,7 @@ This service layer separates business logic from views, making the code:
 from django.db import transaction
 from django.utils import timezone
 from django.core.cache import cache
-from django.db.models import Count, Sum, Avg, Q
+from django.db.models import Case, Count, ExpressionWrapper, F, IntegerField, Q, Sum, Avg, Value, When
 from django.db.models.functions import TruncDate
 from typing import List, Dict, Optional
 import logging
@@ -26,6 +26,67 @@ logger = logging.getLogger(__name__)
 
 class ListingService:
     """Service class for Listing business logic"""
+
+    @staticmethod
+    def apply_home_feed_ranking(queryset):
+        """
+        Apply the default home feed quality gate and ranking.
+
+        Ranking rules:
+        1. Only approved, home-feed eligible listings are shown.
+        2. Active pins occupy the top slots by pin position.
+        3. Active feed boosts lift eligible listings beneath pins.
+        4. Quality, featured status, engagement, and recency break ties.
+        """
+        now = timezone.now()
+        active_window = Q(feed_boost_until__isnull=True) | Q(feed_boost_until__gt=now)
+        active_pin_window = Q(home_feed_pin_until__isnull=True) | Q(home_feed_pin_until__gt=now)
+
+        return queryset.filter(
+            is_home_feed_eligible=True,
+            quality_status='APPROVED',
+        ).annotate(
+            active_home_pin=Case(
+                When(
+                    Q(is_home_feed_pinned=True)
+                    & Q(home_feed_pin_position__isnull=False)
+                    & active_pin_window,
+                    then=Value(1),
+                ),
+                default=Value(0),
+                output_field=IntegerField(),
+            ),
+            home_pin_order=Case(
+                When(
+                    Q(is_home_feed_pinned=True)
+                    & Q(home_feed_pin_position__isnull=False)
+                    & active_pin_window,
+                    then=F('home_feed_pin_position'),
+                ),
+                default=Value(999999),
+                output_field=IntegerField(),
+            ),
+            active_feed_boost=Case(
+                When(
+                    Q(feed_rank_boost__gt=0) & active_window,
+                    then=F('feed_rank_boost'),
+                ),
+                default=Value(0),
+                output_field=IntegerField(),
+            ),
+            engagement_score=ExpressionWrapper(
+                F('views_count') + (F('contact_count') * Value(5)),
+                output_field=IntegerField(),
+            ),
+        ).order_by(
+            '-active_home_pin',
+            'home_pin_order',
+            '-active_feed_boost',
+            '-quality_score',
+            '-is_featured',
+            '-engagement_score',
+            '-created_at',
+        )
 
     @staticmethod
     @transaction.atomic

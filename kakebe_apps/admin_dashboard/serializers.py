@@ -75,6 +75,10 @@ class AdminListingSerializer(serializers.ModelSerializer):
             'price_type', 'price', 'price_min', 'price_max', 'currency',
             'is_price_negotiable', 'status', 'is_verified', 'is_featured',
             'featured_until', 'views_count', 'contact_count',
+            'is_home_feed_eligible', 'quality_status', 'quality_score',
+            'quality_rejection_reason', 'feed_rank_boost', 'feed_boost_until',
+            'feed_boost_reason', 'is_home_feed_pinned',
+            'home_feed_pin_position', 'home_feed_pin_until',
             'created_at', 'updated_at', 'deleted_at',
         ]
         read_only_fields = [
@@ -90,7 +94,55 @@ class AdminListingUpdateSerializer(serializers.ModelSerializer):
             'status', 'is_verified', 'is_featured', 'featured_until',
             'title', 'description', 'category', 'price_type',
             'price', 'price_min', 'price_max', 'currency',
+            'is_home_feed_eligible', 'quality_status', 'quality_score',
+            'quality_rejection_reason', 'feed_rank_boost', 'feed_boost_until',
+            'feed_boost_reason', 'is_home_feed_pinned',
+            'home_feed_pin_position', 'home_feed_pin_until',
         ]
+
+    def validate(self, attrs):
+        quality_status = attrs.get('quality_status', getattr(self.instance, 'quality_status', None))
+        is_eligible = attrs.get('is_home_feed_eligible', getattr(self.instance, 'is_home_feed_eligible', False))
+        is_pinned = attrs.get('is_home_feed_pinned', getattr(self.instance, 'is_home_feed_pinned', False))
+        pin_position = attrs.get('home_feed_pin_position', getattr(self.instance, 'home_feed_pin_position', None))
+
+        if is_eligible and quality_status != 'APPROVED':
+            raise serializers.ValidationError({
+                'is_home_feed_eligible': 'Listing must have quality_status=APPROVED to be home-feed eligible.'
+            })
+        if is_pinned and (quality_status != 'APPROVED' or not is_eligible):
+            raise serializers.ValidationError({
+                'is_home_feed_pinned': 'Pinned listings must be approved and home-feed eligible.'
+            })
+        if is_pinned and pin_position is None:
+            raise serializers.ValidationError({
+                'home_feed_pin_position': 'Pinned listings require a pin position.'
+            })
+        return attrs
+
+
+class AdminListingQualityApproveSerializer(serializers.Serializer):
+    quality_score = serializers.DecimalField(
+        max_digits=5, decimal_places=2, min_value=0, max_value=100, required=False
+    )
+
+
+class AdminListingQualityRejectSerializer(serializers.Serializer):
+    reason = serializers.CharField(required=True, allow_blank=False)
+    quality_score = serializers.DecimalField(
+        max_digits=5, decimal_places=2, min_value=0, max_value=100, required=False
+    )
+
+
+class AdminListingFeedBoostSerializer(serializers.Serializer):
+    feed_rank_boost = serializers.IntegerField(min_value=0, max_value=100)
+    feed_boost_until = serializers.DateTimeField(required=False, allow_null=True)
+    feed_boost_reason = serializers.CharField(required=False, allow_blank=True, allow_null=True, max_length=255)
+
+
+class AdminListingHomeFeedPinSerializer(serializers.Serializer):
+    home_feed_pin_position = serializers.IntegerField(min_value=1)
+    home_feed_pin_until = serializers.DateTimeField(required=False, allow_null=True)
 
 
 # ─────────────────────────── Categories ───────────────────────────

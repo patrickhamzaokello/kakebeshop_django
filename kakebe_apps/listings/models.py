@@ -4,7 +4,7 @@
 import uuid
 
 from django.db import models
-from django.core.validators import MinValueValidator
+from django.core.validators import MaxValueValidator, MinValueValidator
 
 from kakebe_apps.categories.models import Category, Tag
 from kakebe_apps.imagehandler.models import ImageAsset
@@ -30,6 +30,13 @@ class Listing(models.Model):
         ('CLOSED', 'Closed'),
         ('DEACTIVATED', 'Deactivated'),
         ('REJECTED', 'Rejected'),
+    ]
+
+    QUALITY_STATUS_CHOICES = [
+        ('PENDING', 'Pending Review'),
+        ('APPROVED', 'Approved'),
+        ('REJECTED', 'Rejected'),
+        ('NEEDS_REVIEW', 'Needs Review'),
     ]
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
@@ -86,6 +93,34 @@ class Listing(models.Model):
     is_verified = models.BooleanField(default=False, db_index=True)
     verified_at = models.DateTimeField(null=True, blank=True)
 
+    # Home feed quality controls
+    is_home_feed_eligible = models.BooleanField(default=False, db_index=True)
+    quality_status = models.CharField(
+        max_length=20,
+        choices=QUALITY_STATUS_CHOICES,
+        default='PENDING',
+        db_index=True
+    )
+    quality_score = models.DecimalField(
+        max_digits=5,
+        decimal_places=2,
+        default=0,
+        validators=[MinValueValidator(0), MaxValueValidator(100)]
+    )
+    quality_rejection_reason = models.TextField(null=True, blank=True)
+
+    # Home feed ranking controls
+    feed_rank_boost = models.PositiveIntegerField(
+        default=0,
+        validators=[MaxValueValidator(100)],
+        db_index=True
+    )
+    feed_boost_until = models.DateTimeField(null=True, blank=True)
+    feed_boost_reason = models.CharField(max_length=255, null=True, blank=True)
+    is_home_feed_pinned = models.BooleanField(default=False, db_index=True)
+    home_feed_pin_position = models.PositiveIntegerField(null=True, blank=True)
+    home_feed_pin_until = models.DateTimeField(null=True, blank=True)
+
     # Featured settings
     is_featured = models.BooleanField(default=False, db_index=True)
     featured_until = models.DateTimeField(null=True, blank=True)
@@ -111,6 +146,9 @@ class Listing(models.Model):
             models.Index(fields=['category', 'status']),
             models.Index(fields=['is_verified', 'status']),
             models.Index(fields=['is_featured', 'is_verified', 'status']),
+            models.Index(fields=['is_home_feed_eligible', 'quality_status', 'status'], name='listings_is_home_6af4d2_idx'),
+            models.Index(fields=['is_home_feed_pinned', 'home_feed_pin_position'], name='listings_is_home_221b7e_idx'),
+            models.Index(fields=['feed_rank_boost'], name='listings_feed_ra_8e2c0b_idx'),
             models.Index(fields=['-created_at']),
             models.Index(fields=['listing_type', 'status']),
         ]
@@ -297,8 +335,8 @@ class ListingDeliveryMode(models.Model):
         db_table = 'listing_delivery_modes'
         unique_together = ('listing', 'mode')
         indexes = [
-            models.Index(fields=['listing']),
-            models.Index(fields=['mode']),
+            models.Index(fields=['listing'], name='listing_del_listing_idx'),
+            models.Index(fields=['mode'], name='listing_del_mode_idx'),
         ]
 
     DEFAULT_MODES_BY_TYPE = {

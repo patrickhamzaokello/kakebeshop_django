@@ -168,7 +168,8 @@ class ListingViewSet(viewsets.ViewSet):
             except ValueError:
                 pass
 
-        # Sorting with validated fields
+        # Sorting with validated fields. When no explicit sort is requested,
+        # the current paginated feed uses the home-feed quality ranker.
         ALLOWED_SORT_FIELDS = {
             'created_at': 'created_at',
             '-created_at': '-created_at',
@@ -180,9 +181,15 @@ class ListingViewSet(viewsets.ViewSet):
             '-title': '-title',
         }
 
-        sort_by = request.query_params.get('sort_by', '-created_at')
-        order_field = ALLOWED_SORT_FIELDS.get(sort_by, '-created_at')
-        queryset = queryset.order_by(order_field)
+        sort_by = request.query_params.get('sort_by')
+        if sort_by:
+            order_field = ALLOWED_SORT_FIELDS.get(sort_by, '-created_at')
+            queryset = queryset.filter(
+                is_home_feed_eligible=True,
+                quality_status='APPROVED',
+            ).order_by(order_field)
+        else:
+            queryset = ListingService.apply_home_feed_ranking(queryset)
 
         # Apply pagination
         paginator = self.pagination_class()

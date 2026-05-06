@@ -53,6 +53,8 @@ class ListingModelTestCase(TestCase):
         self.assertEqual(listing.title, 'Test Product')
         self.assertEqual(listing.merchant, self.merchant)
         self.assertEqual(listing.status, 'DRAFT')
+        self.assertFalse(listing.is_home_feed_eligible)
+        self.assertEqual(listing.quality_status, 'PENDING')
         self.assertIsNotNone(listing.id)
 
     def test_is_active_property(self):
@@ -183,7 +185,10 @@ class ListingAPITestCase(APITestCase):
             price=Decimal('100.00'),
             currency='UGX',
             status='ACTIVE',
-            is_verified=True
+            is_verified=True,
+            is_home_feed_eligible=True,
+            quality_status='APPROVED',
+            quality_score=Decimal('50.00')
         )
         self.listing.tags.add(self.tag1)
 
@@ -665,3 +670,58 @@ class ListingServiceTestCase(TestCase):
         self.assertEqual(stats['contacts'], 10)
         self.assertTrue(stats['is_active'])
         self.assertIn('engagement_rate', stats)
+
+    def test_apply_home_feed_ranking(self):
+        """Test home feed quality gate and ranking controls."""
+        pinned = Listing.objects.create(
+            merchant=self.merchant,
+            title='Pinned Product',
+            description='Pinned description',
+            listing_type='PRODUCT',
+            category=self.category,
+            price_type='FIXED',
+            price=Decimal('100.00'),
+            status='ACTIVE',
+            is_verified=True,
+            is_home_feed_eligible=True,
+            quality_status='APPROVED',
+            quality_score=Decimal('60.00'),
+            is_home_feed_pinned=True,
+            home_feed_pin_position=1
+        )
+        boosted = Listing.objects.create(
+            merchant=self.merchant,
+            title='Boosted Product',
+            description='Boosted description',
+            listing_type='PRODUCT',
+            category=self.category,
+            price_type='FIXED',
+            price=Decimal('100.00'),
+            status='ACTIVE',
+            is_verified=True,
+            is_home_feed_eligible=True,
+            quality_status='APPROVED',
+            quality_score=Decimal('90.00'),
+            feed_rank_boost=80
+        )
+        rejected = Listing.objects.create(
+            merchant=self.merchant,
+            title='Rejected Product',
+            description='Rejected description',
+            listing_type='PRODUCT',
+            category=self.category,
+            price_type='FIXED',
+            price=Decimal('100.00'),
+            status='ACTIVE',
+            is_verified=True,
+            is_home_feed_eligible=False,
+            quality_status='REJECTED'
+        )
+
+        ranked_ids = list(
+            self.service.apply_home_feed_ranking(Listing.objects.all())
+            .values_list('id', flat=True)
+        )
+
+        self.assertEqual(ranked_ids[:2], [pinned.id, boosted.id])
+        self.assertNotIn(rejected.id, ranked_ids)
