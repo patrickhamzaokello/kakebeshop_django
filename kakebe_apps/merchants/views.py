@@ -253,7 +253,10 @@ class MerchantViewSet(viewsets.ViewSet):
             merchant=merchant,
             status='ACTIVE',
             is_verified=True,
-            deleted_at__isnull=True
+            deleted_at__isnull=True,
+            merchant__status='ACTIVE',
+            merchant__verified=True,
+            merchant__deleted_at__isnull=True,
         ).select_related('merchant', 'category')
 
         # Filter by listing type

@@ -100,6 +100,9 @@ class ConversationViewSet(viewsets.ReadOnlyModelViewSet):
                 Listing.objects.select_related('merchant', 'merchant__user'),
                 id=listing_id,
                 deleted_at__isnull=True,
+                merchant__status='ACTIVE',
+                merchant__verified=True,
+                merchant__deleted_at__isnull=True,
             )
             if merchant and merchant.id != listing.merchant_id:
                 raise ValueError("listing_id does not match the order merchant.")
@@ -906,7 +909,16 @@ class ListingCommentViewSet(viewsets.ModelViewSet):
             # Listing-scoped: return only top-level, non-deleted comments
             return (
                 ListingComment.objects
-                .filter(listing_id=listing_id, parent__isnull=True, is_deleted=False)
+                .filter(
+                    listing_id=listing_id,
+                    parent__isnull=True,
+                    is_deleted=False,
+                    listing__status='ACTIVE',
+                    listing__deleted_at__isnull=True,
+                    listing__merchant__status='ACTIVE',
+                    listing__merchant__verified=True,
+                    listing__merchant__deleted_at__isnull=True,
+                )
                 .select_related('user')
                 .prefetch_related('replies')
             )
@@ -917,7 +929,13 @@ class ListingCommentViewSet(viewsets.ModelViewSet):
         listing_id = self.kwargs.get('listing_id')
         if listing_id:
             listing = get_object_or_404(
-                Listing, id=listing_id, status='ACTIVE', deleted_at__isnull=True
+                Listing,
+                id=listing_id,
+                status='ACTIVE',
+                deleted_at__isnull=True,
+                merchant__status='ACTIVE',
+                merchant__verified=True,
+                merchant__deleted_at__isnull=True,
             )
             serializer.save(user=self.request.user, listing=listing)
         else:
@@ -975,7 +993,15 @@ class ListingCommentViewSet(viewsets.ModelViewSet):
                 {'error': 'A listing ID is required (URL segment or ?listing= param).'},
                 status=status.HTTP_400_BAD_REQUEST,
             )
-        listing = get_object_or_404(Listing, id=lid)
+        listing = get_object_or_404(
+            Listing,
+            id=lid,
+            status='ACTIVE',
+            deleted_at__isnull=True,
+            merchant__status='ACTIVE',
+            merchant__verified=True,
+            merchant__deleted_at__isnull=True,
+        )
         total = ListingComment.objects.filter(listing=listing, is_deleted=False).count()
         return Response({'listing_id': str(listing.id), 'total_comments': total})
 
@@ -1202,7 +1228,10 @@ class EnhancedSearchView(APIView):
             q_filter,
             status='ACTIVE',
             is_verified=True,
-            deleted_at__isnull=True
+            deleted_at__isnull=True,
+            merchant__status='ACTIVE',
+            merchant__verified=True,
+            merchant__deleted_at__isnull=True,
         )
 
         # Category filter

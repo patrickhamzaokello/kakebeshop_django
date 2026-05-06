@@ -163,6 +163,9 @@ class Listing(models.Model):
         return (
                 self.status == 'ACTIVE'
                 and self.is_verified
+                and self.merchant.status == 'ACTIVE'
+                and self.merchant.verified
+                and self.merchant.deleted_at is None
                 and self.deleted_at is None
         )
 

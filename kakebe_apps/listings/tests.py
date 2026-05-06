@@ -73,7 +73,14 @@ class ListingModelTestCase(TestCase):
 
         self.assertTrue(listing.is_active)
 
+        self.merchant.status = 'SUSPENDED'
+        self.merchant.save(update_fields=['status'])
+        listing.refresh_from_db()
+        self.assertFalse(listing.is_active)
+
         # Change status
+        self.merchant.status = 'ACTIVE'
+        self.merchant.save(update_fields=['status'])
         listing.status = 'DRAFT'
         listing.save()
         self.assertFalse(listing.is_active)
@@ -201,6 +208,41 @@ class ListingAPITestCase(APITestCase):
         self.assertIn('results', response.data)
         self.assertEqual(len(response.data['results']), 1)
         self.assertEqual(response.data['results'][0]['title'], 'Test Product')
+
+    def test_listings_from_inactive_merchants_are_hidden(self):
+        """Public listing reads ignore listings from inactive merchants."""
+        inactive_user = User.objects.create_user(
+            username='inactivemerchant',
+            email='inactive@example.com',
+            password='testpass123'
+        )
+        inactive_merchant = Merchant.objects.create(
+            user=inactive_user,
+            display_name='Inactive Merchant',
+            verified=True,
+            status='SUSPENDED'
+        )
+        hidden_listing = Listing.objects.create(
+            merchant=inactive_merchant,
+            title='Hidden Product',
+            description='Should not appear',
+            listing_type='PRODUCT',
+            category=self.category,
+            price_type='FIXED',
+            price=Decimal('100.00'),
+            status='ACTIVE',
+            is_verified=True,
+            is_home_feed_eligible=True,
+            quality_status='APPROVED',
+            quality_score=Decimal('90.00')
+        )
+
+        list_response = self.client.get(reverse('listing-list'))
+        titles = [item['title'] for item in list_response.data['results']]
+        self.assertNotIn('Hidden Product', titles)
+
+        detail_response = self.client.get(reverse('listing-detail', kwargs={'pk': hidden_listing.id}))
+        self.assertEqual(detail_response.status_code, status.HTTP_404_NOT_FOUND)
 
     def test_list_listings_with_search(self):
         """Test listing search functionality"""
