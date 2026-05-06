@@ -180,19 +180,52 @@ class ListingReviewSerializer(serializers.ModelSerializer):
 
 
 class MerchantReviewSerializer(serializers.ModelSerializer):
-    user_name = serializers.CharField(source='user.get_full_name', read_only=True)
+    user_id = serializers.UUIDField(source='user.id', read_only=True)
+    user_name = serializers.CharField(source='user.name', read_only=True)
+    user_profile_image = serializers.URLField(source='user.profile_image', read_only=True)
 
     class Meta:
         model = MerchantReview
-        fields = ['id', 'merchant', 'rating', 'comment', 'user_name', 'created_at', 'updated_at']
-        read_only_fields = ['user_name', 'created_at', 'updated_at']
+        fields = [
+            'id', 'merchant', 'order_intent', 'rating', 'comment',
+            'user_id', 'user_name', 'user_profile_image',
+            'created_at', 'updated_at',
+        ]
+        read_only_fields = [
+            'user_id', 'user_name', 'user_profile_image',
+            'created_at', 'updated_at',
+        ]
 
     def validate(self, attrs):
         user = self.context['request'].user
-        merchant = attrs['merchant']
+        merchant = attrs.get('merchant') or getattr(self.instance, 'merchant', None)
+        order_intent = attrs.get('order_intent') or getattr(self.instance, 'order_intent', None)
 
-        if MerchantReview.objects.filter(user=user, merchant=merchant).exists():
+        if merchant is None:
+            raise serializers.ValidationError({'merchant': 'This field is required.'})
+
+        if merchant.user_id == user.id:
+            raise serializers.ValidationError("You cannot review your own merchant profile.")
+
+        existing = MerchantReview.objects.filter(user=user, merchant=merchant)
+        if self.instance:
+            existing = existing.exclude(pk=self.instance.pk)
+        if existing.exists():
             raise serializers.ValidationError("You have already reviewed this merchant.")
+
+        completed_orders = OrderIntent.objects.filter(
+            buyer=user,
+            merchant=merchant,
+            status='COMPLETED',
+        )
+
+        if order_intent:
+            if not completed_orders.filter(pk=order_intent.pk).exists():
+                raise serializers.ValidationError({
+                    'order_intent': 'Order must belong to you, match this merchant, and be completed.'
+                })
+        elif not completed_orders.exists():
+            raise serializers.ValidationError("You can only review merchants after a completed order.")
 
         return attrs
 

@@ -19,6 +19,8 @@ urlpatterns = [
 # GET    /merchants/featured/          - Get featured merchants (shuffled, random order)
 #                                        Query params: limit (default: 10, max: 50)
 # GET    /merchants/{id}/              - Retrieve merchant detail (must be verified)
+# GET    /merchants/{id}/reviews/      - Paginated public merchant reviews
+# GET    /merchants/{id}/score/        - Merchant reputation score
 #
 # AUTHENTICATED ENDPOINTS:
 # GET    /merchants/me/                      - Get own profile (works even if unverified)

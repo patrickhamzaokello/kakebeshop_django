@@ -65,7 +65,7 @@ class MerchantViewSet(viewsets.ViewSet):
             status='ACTIVE',
             verified=True,
             deleted_at__isnull=True
-        ).select_related('user')
+        ).select_related('user', 'score')
 
     def list(self, request):
         """List verified and active merchants with filtering and search"""
@@ -151,6 +151,46 @@ class MerchantViewSet(viewsets.ViewSet):
             analytics.merchant_viewed(request.user.id, merchant, source='detail')
         serializer = MerchantDetailSerializer(merchant, context={'request': request})
         return Response(serializer.data)
+
+    @action(detail=True, methods=['get'], url_path='reviews')
+    def reviews(self, request, pk=None):
+        """Public paginated reviews for a verified, active merchant."""
+        if (error := self._validate_uuid(pk)):
+            return error
+        merchant = get_object_or_404(self.get_queryset(), pk=pk)
+
+        from kakebe_apps.engagement.models import MerchantReview
+        from kakebe_apps.engagement.serializers import MerchantReviewSerializer
+
+        queryset = MerchantReview.objects.filter(
+            merchant=merchant,
+        ).select_related('user', 'order_intent').order_by('-created_at')
+
+        paginator = self.pagination_class()
+        page = paginator.paginate_queryset(queryset, request)
+        if page is not None:
+            serializer = MerchantReviewSerializer(page, many=True, context={'request': request})
+            return paginator.get_paginated_response(serializer.data)
+
+        serializer = MerchantReviewSerializer(queryset, many=True, context={'request': request})
+        return Response(serializer.data)
+
+    @action(detail=True, methods=['get'], url_path='score')
+    def score(self, request, pk=None):
+        """Public merchant reputation score for a verified, active merchant."""
+        if (error := self._validate_uuid(pk)):
+            return error
+        merchant = get_object_or_404(self.get_queryset(), pk=pk)
+
+        from kakebe_apps.engagement.serializers import MerchantScoreSerializer
+        from kakebe_apps.engagement.services import MerchantReputationService
+
+        try:
+            merchant_score = merchant.score
+        except Exception:
+            merchant_score = MerchantReputationService.sync_merchant(merchant)
+
+        return Response(MerchantScoreSerializer(merchant_score).data)
 
     @action(detail=False, methods=['get'], url_path='featured')
     def featured(self, request):

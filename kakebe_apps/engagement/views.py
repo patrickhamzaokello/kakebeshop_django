@@ -325,9 +325,18 @@ class MerchantReviewViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
-        return MerchantReview.objects.filter(user=self.request.user)
+        queryset = MerchantReview.objects.filter(
+            user=self.request.user
+        ).select_related('merchant', 'user', 'order_intent')
+        merchant_id = self.request.query_params.get('merchant')
+        if merchant_id:
+            queryset = queryset.filter(merchant_id=merchant_id)
+        return queryset.order_by('-created_at')
 
     def perform_create(self, serializer):
+        serializer.save(user=self.request.user)
+
+    def perform_update(self, serializer):
         serializer.save(user=self.request.user)
 
 

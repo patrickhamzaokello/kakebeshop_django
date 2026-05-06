@@ -12,14 +12,21 @@ User = get_user_model()
 class MerchantListSerializer(serializers.ModelSerializer):
     """Lightweight serializer for listing merchants"""
     location_name = serializers.CharField(source='location.name', read_only=True)
+    reputation_score = serializers.SerializerMethodField()
 
 
     class Meta:
         model = Merchant
         fields = [
             'id', 'display_name', 'business_name','location_name',
-            'logo', 'rating', 'total_reviews', 'verified', 'featured'
+            'logo', 'rating', 'total_reviews', 'reputation_score',
+            'verified', 'featured'
         ]
+
+    def get_reputation_score(self, obj):
+        if hasattr(obj, 'score'):
+            return obj.score.score
+        return None
 
 
 class MerchantDetailSerializer(serializers.ModelSerializer):
@@ -29,6 +36,8 @@ class MerchantDetailSerializer(serializers.ModelSerializer):
     location = LocationSerializer(read_only=True)
     email = serializers.EmailField(source='user.email', read_only=True)
     is_active = serializers.BooleanField(read_only=True)
+    reputation_score = serializers.SerializerMethodField()
+    score = serializers.SerializerMethodField()
 
     class Meta:
         model = Merchant
@@ -37,7 +46,8 @@ class MerchantDetailSerializer(serializers.ModelSerializer):
             'display_name', 'business_name', 'description',
             'business_phone','location', 'business_email', 'logo', 'cover_image',
             'verified', 'verification_date', 'featured',
-            'rating', 'total_reviews', 'status', 'is_active',
+            'rating', 'total_reviews', 'reputation_score', 'score',
+            'status', 'is_active',
             'created_at', 'updated_at'
         ]
         read_only_fields = [
@@ -46,6 +56,27 @@ class MerchantDetailSerializer(serializers.ModelSerializer):
             'rating', 'total_reviews', 'status', 'is_active',
             'created_at', 'updated_at'
         ]
+
+    def get_reputation_score(self, obj):
+        if hasattr(obj, 'score'):
+            return obj.score.score
+        return None
+
+    def get_score(self, obj):
+        if not hasattr(obj, 'score'):
+            return None
+        score = obj.score
+        return {
+            'active_listing_count': score.active_listing_count,
+            'total_listing_count': score.total_listing_count,
+            'response_rate': score.response_rate,
+            'average_response_time_minutes': score.average_response_time_minutes,
+            'completed_orders': score.completed_orders,
+            'cancelled_orders': score.cancelled_orders,
+            'report_count': score.report_count,
+            'score': score.score,
+            'last_calculated': score.last_calculated,
+        }
 
 
 class MerchantUpdateSerializer(serializers.ModelSerializer):
