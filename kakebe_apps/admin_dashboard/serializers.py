@@ -7,6 +7,7 @@ from kakebe_apps.listings.models import Listing
 from kakebe_apps.merchants.models import Merchant
 from kakebe_apps.imagehandler.models import ImageAsset
 from kakebe_apps.notifications.models import BroadcastNotificationCampaign
+from kakebe_apps.engagement.models import ListingComment
 
 User = get_user_model()
 
@@ -252,6 +253,57 @@ class AdminImageAssetSerializer(serializers.ModelSerializer):
 
     def get_cdn_url(self, obj):
         return obj.cdn_url()
+
+
+# Listing comment moderation
+
+class AdminListingCommentSerializer(serializers.ModelSerializer):
+    listing_title = serializers.CharField(source='listing.title', read_only=True)
+    merchant_id = serializers.UUIDField(source='listing.merchant.id', read_only=True)
+    merchant_name = serializers.CharField(source='listing.merchant.display_name', read_only=True)
+    merchant_store_name = serializers.CharField(source='listing.merchant.business_name', read_only=True)
+    merchant_profile_picture = serializers.CharField(source='listing.merchant.logo', read_only=True)
+    user_id = serializers.UUIDField(source='user.id', read_only=True)
+    user_name = serializers.CharField(source='user.name', read_only=True)
+    user_email = serializers.EmailField(source='user.email', read_only=True)
+    user_profile_picture = serializers.CharField(source='user.profile_image', read_only=True)
+    parent_body = serializers.CharField(source='parent.body', read_only=True, allow_null=True)
+    reply_count = serializers.SerializerMethodField()
+
+    class Meta:
+        model = ListingComment
+        fields = [
+            'id', 'listing', 'listing_title',
+            'merchant_id', 'merchant_name', 'merchant_store_name', 'merchant_profile_picture',
+            'user_id', 'user_name', 'user_email', 'user_profile_picture',
+            'parent', 'parent_body', 'body', 'is_deleted', 'reply_count',
+            'created_at', 'updated_at',
+        ]
+        read_only_fields = [
+            'id', 'listing', 'listing_title',
+            'merchant_id', 'merchant_name', 'merchant_store_name', 'merchant_profile_picture',
+            'user_id', 'user_name', 'user_email', 'user_profile_picture',
+            'parent', 'parent_body', 'reply_count', 'created_at', 'updated_at',
+        ]
+
+    def get_reply_count(self, obj):
+        if hasattr(obj, 'reply_count'):
+            return obj.reply_count
+        return obj.replies.count()
+
+
+class AdminListingCommentUpdateSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = ListingComment
+        fields = ['body', 'is_deleted']
+
+    def validate_body(self, value):
+        value = value.strip()
+        if not value:
+            raise serializers.ValidationError('Comment body cannot be empty.')
+        if len(value) > 2000:
+            raise serializers.ValidationError('Comment body cannot exceed 2000 characters.')
+        return value
 
 
 # Broadcast notifications

@@ -5,6 +5,7 @@ from .views import (
     AdminBroadcastCampaignViewSet,
     AdminCategoryViewSet,
     AdminImageViewSet,
+    AdminListingCommentViewSet,
     AdminListingViewSet,
     AdminMerchantViewSet,
     AdminOrderViewSet,
@@ -20,6 +21,7 @@ router.register(r'listings', AdminListingViewSet, basename='admin-listings')
 router.register(r'categories', AdminCategoryViewSet, basename='admin-categories')
 router.register(r'orders', AdminOrderViewSet, basename='admin-orders')
 router.register(r'images', AdminImageViewSet, basename='admin-images')
+router.register(r'listing-comments', AdminListingCommentViewSet, basename='admin-listing-comments')
 router.register(r'broadcasts', AdminBroadcastCampaignViewSet, basename='admin-broadcasts')
 
 urlpatterns = [

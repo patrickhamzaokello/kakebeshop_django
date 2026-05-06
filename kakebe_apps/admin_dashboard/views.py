@@ -16,6 +16,7 @@ from kakebe_apps.merchants.models import Merchant
 from kakebe_apps.orders.models import OrderIntent
 from kakebe_apps.notifications.models import BroadcastNotificationCampaign
 from kakebe_apps.notifications.tasks import send_broadcast_campaign
+from kakebe_apps.engagement.models import ListingComment
 from .permissions import IsStaffUser
 from .serializers import (
     AdminBroadcastCampaignCreateSerializer,
@@ -23,6 +24,8 @@ from .serializers import (
     AdminCategorySerializer,
     AdminCategoryUpdateSerializer,
     AdminImageAssetSerializer,
+    AdminListingCommentSerializer,
+    AdminListingCommentUpdateSerializer,
     AdminListingSerializer,
     AdminListingFeedBoostSerializer,
     AdminListingHomeFeedPinSerializer,
@@ -900,6 +903,139 @@ class AdminImageViewSet(ViewSet):
         count = abandoned.count()
         abandoned.delete()
         return Response({'success': True, 'message': f'Deleted {count} orphan image(s)'})
+
+
+class AdminListingCommentViewSet(ViewSet):
+    """
+    Staff-only listing comment moderation.
+
+    GET    /api/v1/admin/listing-comments/              - list all comments, including hidden
+    GET    /api/v1/admin/listing-comments/{id}/         - retrieve a comment
+    PATCH  /api/v1/admin/listing-comments/{id}/         - edit body or hidden state
+    DELETE /api/v1/admin/listing-comments/{id}/         - hide a comment
+    POST   /api/v1/admin/listing-comments/{id}/hide/    - hide a comment
+    POST   /api/v1/admin/listing-comments/{id}/restore/ - restore a hidden comment
+    """
+    permission_classes = [IsStaffUser]
+    pagination_class = AdminPagination
+
+    def _get_base_qs(self):
+        return ListingComment.objects.select_related(
+            'listing', 'listing__merchant', 'user', 'parent'
+        ).annotate(
+            reply_count=Count('replies')
+        ).order_by('-created_at')
+
+    def _get_comment(self, pk):
+        try:
+            return self._get_base_qs().get(pk=pk)
+        except ListingComment.DoesNotExist:
+            return None
+
+    def _apply_filters(self, qs, request):
+        q = request.query_params.get('q', '').strip()
+        if q:
+            qs = qs.filter(
+                Q(body__icontains=q) |
+                Q(user__name__icontains=q) |
+                Q(user__email__icontains=q) |
+                Q(listing__title__icontains=q) |
+                Q(listing__merchant__display_name__icontains=q) |
+                Q(listing__merchant__business_name__icontains=q)
+            )
+
+        listing_id = request.query_params.get('listing_id', '').strip()
+        if listing_id:
+            qs = qs.filter(listing_id=listing_id)
+
+        merchant_id = request.query_params.get('merchant_id', '').strip()
+        if merchant_id:
+            qs = qs.filter(listing__merchant_id=merchant_id)
+
+        user_id = request.query_params.get('user_id', '').strip()
+        if user_id:
+            qs = qs.filter(user_id=user_id)
+
+        parent_id = request.query_params.get('parent_id', '').strip()
+        if parent_id:
+            qs = qs.filter(parent_id=parent_id)
+
+        is_deleted = request.query_params.get('is_deleted')
+        if is_deleted is not None:
+            qs = qs.filter(is_deleted=is_deleted.lower() == 'true')
+
+        has_parent = request.query_params.get('has_parent')
+        if has_parent is not None:
+            qs = qs.filter(parent__isnull=has_parent.lower() != 'true')
+
+        date_from = request.query_params.get('date_from')
+        if date_from:
+            qs = qs.filter(created_at__date__gte=date_from)
+
+        date_to = request.query_params.get('date_to')
+        if date_to:
+            qs = qs.filter(created_at__date__lte=date_to)
+
+        return qs
+
+    def list(self, request):
+        qs = self._apply_filters(self._get_base_qs(), request)
+
+        paginator = self.pagination_class()
+        page = paginator.paginate_queryset(qs, request)
+        if page is not None:
+            return paginator.get_paginated_response(AdminListingCommentSerializer(page, many=True).data)
+        return Response({'success': True, 'data': AdminListingCommentSerializer(qs, many=True).data})
+
+    def retrieve(self, request, pk=None):
+        comment = self._get_comment(pk)
+        if comment is None:
+            return Response({'success': False, 'error': 'Comment not found'}, status=status.HTTP_404_NOT_FOUND)
+        return Response({'success': True, 'data': AdminListingCommentSerializer(comment).data})
+
+    def partial_update(self, request, pk=None):
+        comment = self._get_comment(pk)
+        if comment is None:
+            return Response({'success': False, 'error': 'Comment not found'}, status=status.HTTP_404_NOT_FOUND)
+
+        serializer = AdminListingCommentUpdateSerializer(comment, data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        comment = self._get_comment(pk)
+        return Response({'success': True, 'data': AdminListingCommentSerializer(comment).data})
+
+    def destroy(self, request, pk=None):
+        comment = self._get_comment(pk)
+        if comment is None:
+            return Response({'success': False, 'error': 'Comment not found'}, status=status.HTTP_404_NOT_FOUND)
+
+        comment.is_deleted = True
+        comment.save(update_fields=['is_deleted', 'updated_at'])
+        comment = self._get_comment(pk)
+        return Response({
+            'success': True,
+            'message': 'Comment hidden',
+            'data': AdminListingCommentSerializer(comment).data,
+        })
+
+    @action(detail=True, methods=['post'])
+    def hide(self, request, pk=None):
+        return self.destroy(request, pk=pk)
+
+    @action(detail=True, methods=['post'])
+    def restore(self, request, pk=None):
+        comment = self._get_comment(pk)
+        if comment is None:
+            return Response({'success': False, 'error': 'Comment not found'}, status=status.HTTP_404_NOT_FOUND)
+
+        comment.is_deleted = False
+        comment.save(update_fields=['is_deleted', 'updated_at'])
+        comment = self._get_comment(pk)
+        return Response({
+            'success': True,
+            'message': 'Comment restored',
+            'data': AdminListingCommentSerializer(comment).data,
+        })
 
 
 class AdminBroadcastCampaignViewSet(ViewSet):

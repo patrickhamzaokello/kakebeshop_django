@@ -20,7 +20,8 @@ Authorization: Bearer <access_token>
 - [Category Management](#5-category-management)
 - [Order Management](#6-order-management)
 - [Image Management](#7-image-management)
-- [Broadcast Notifications](#8-broadcast-notifications)
+- [Listing Comment Moderation](#8-listing-comment-moderation)
+- [Broadcast Notifications](#9-broadcast-notifications)
 
 ---
 
@@ -1059,7 +1060,98 @@ Delete orphan images older than 24 hours.
 
 ---
 
-## 8. Broadcast Notifications
+## 8. Listing Comment Moderation
+
+Admin endpoints for reviewing, filtering, hiding, restoring, and editing listing comments. These endpoints return both visible and hidden comments unless `is_deleted` is provided.
+
+### GET `/api/v1/admin/listing-comments/`
+
+List all listing comments, including hidden comments and replies.
+
+**Query Parameters**
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `q` | string | Search comment body, user name/email, listing title, or merchant name |
+| `listing_id` | uuid | Filter by listing |
+| `merchant_id` | uuid | Filter by listing merchant |
+| `user_id` | uuid | Filter by comment author |
+| `parent_id` | uuid | Filter replies under a parent comment |
+| `is_deleted` | boolean | Filter hidden comments (`true`) or visible comments (`false`) |
+| `has_parent` | boolean | `true` for replies, `false` for top-level comments |
+| `date_from` | date | Filter comments from date (`YYYY-MM-DD`) |
+| `date_to` | date | Filter comments up to date (`YYYY-MM-DD`) |
+| `page` | integer | Page number |
+| `page_size` | integer | Items per page |
+
+**Response `200`**
+
+```json
+{
+  "count": 0,
+  "total_pages": 0,
+  "current_page": 1,
+  "next": null,
+  "previous": null,
+  "results": [
+    {
+      "id": "uuid",
+      "listing": "uuid",
+      "listing_title": "Dental cleaning",
+      "merchant_id": "uuid",
+      "merchant_name": "Kampala Dental",
+      "merchant_store_name": "Kampala Dental Clinic",
+      "merchant_profile_picture": "https://cdn.example.com/merchant-logo.jpg",
+      "user_id": "uuid",
+      "user_name": "Jane Buyer",
+      "user_email": "jane@example.com",
+      "user_profile_picture": "https://cdn.example.com/profile.jpg",
+      "parent": null,
+      "parent_body": null,
+      "body": "Is this still available?",
+      "is_deleted": false,
+      "reply_count": 2,
+      "created_at": "2026-05-07T08:30:00Z",
+      "updated_at": "2026-05-07T08:30:00Z"
+    }
+  ]
+}
+```
+
+### GET `/api/v1/admin/listing-comments/{id}/`
+
+Retrieve one comment, including hidden comments.
+
+### PATCH `/api/v1/admin/listing-comments/{id}/`
+
+Update a comment body or hidden state.
+
+```json
+{
+  "body": "Edited by moderation",
+  "is_deleted": true
+}
+```
+
+### POST `/api/v1/admin/listing-comments/{id}/hide/`
+
+Hide a comment by setting `is_deleted=true`.
+
+**Request Body** - None
+
+### DELETE `/api/v1/admin/listing-comments/{id}/`
+
+Same behavior as `hide/`: hides the comment without permanently deleting it.
+
+### POST `/api/v1/admin/listing-comments/{id}/restore/`
+
+Restore a hidden comment by setting `is_deleted=false`.
+
+**Request Body** - None
+
+---
+
+## 9. Broadcast Notifications
 
 Admin endpoints for scheduling push notifications or emails to all eligible active users.
 

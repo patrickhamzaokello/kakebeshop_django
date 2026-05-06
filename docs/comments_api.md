@@ -33,6 +33,8 @@ List endpoints use page-number pagination.
 | `DELETE` | `/api/v1/listing-comments/{id}/` | Delete a comment (owner only) |
 | `GET` | `/api/v1/listing-comments/{id}/replies/` | List paginated replies for a comment |
 
+Admin moderation endpoints are available at `/api/v1/admin/listing-comments/`; see `docs/admin_dashboard_api.md`.
+
 ---
 
 ## 1. List Comments
@@ -67,6 +69,7 @@ Returns paginated top-level (non-reply) comments for the given listing, ordered 
       "parent": null,
       "user_id": "1a2b3c4d-5e6f-7a8b-9c0d-1e2f3a4b5c6d",
       "user_name": "Jane Doe",
+      "user_profile_image": "https://cdn.example.com/profiles/jane.jpg",
       "body": "Is this item still available?",
       "reply_count": 2,
       "is_owner": false,
@@ -125,6 +128,7 @@ Posts a new top-level comment or a reply to an existing comment on a listing. Th
     "parent": null,
     "user_id": "1a2b3c4d-5e6f-7a8b-9c0d-1e2f3a4b5c6d",
     "user_name": "Jane Doe",
+    "user_profile_image": "https://cdn.example.com/profiles/jane.jpg",
     "body": "Is this item still available?",
     "reply_count": 0,
     "is_owner": true,
@@ -194,6 +198,7 @@ Returns a single comment by its ID. Deleted comments are excluded.
   "parent": null,
   "user_id": "1a2b3c4d-5e6f-7a8b-9c0d-1e2f3a4b5c6d",
   "user_name": "Jane Doe",
+  "user_profile_image": "https://cdn.example.com/profiles/jane.jpg",
   "body": "Is this item still available?",
   "reply_count": 2,
   "is_owner": false,
@@ -245,6 +250,7 @@ Updates the body of an existing comment. Only the comment owner can edit their o
     "parent": null,
     "user_id": "1a2b3c4d-5e6f-7a8b-9c0d-1e2f3a4b5c6d",
     "user_name": "Jane Doe",
+    "user_profile_image": "https://cdn.example.com/profiles/jane.jpg",
     "body": "Updated comment text here.",
     "reply_count": 2,
     "is_owner": true,
@@ -323,6 +329,7 @@ Returns paginated replies for a specific comment, ordered by oldest first. Delet
       "id": "9b1deb4d-3b7d-4bad-9bdd-2b0d7b3dcb6d",
       "user_id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
       "user_name": "John Smith",
+      "user_profile_image": "https://cdn.example.com/profiles/john.jpg",
       "body": "Yes, still available!",
       "is_owner": false,
       "created_at": "2026-04-11T08:15:00Z",
@@ -353,6 +360,7 @@ Returned by List, Retrieve, Create, and Edit endpoints.
 | `parent` | UUID \| null | ID of the parent comment if this is a reply; `null` for top-level comments |
 | `user_id` | UUID | ID of the user who posted the comment |
 | `user_name` | string | Display name of the user who posted the comment |
+| `user_profile_image` | URL \| null | Profile image URL for the user who posted the comment |
 | `body` | string | Comment text |
 | `reply_count` | integer | Number of non-deleted replies to this comment |
 | `is_owner` | boolean | `true` if the authenticated user is the comment author |
@@ -368,6 +376,7 @@ Returned only by the **List Replies** endpoint.
 | `id` | UUID | Unique reply identifier |
 | `user_id` | UUID | ID of the user who posted the reply |
 | `user_name` | string | Display name of the user who posted the reply |
+| `user_profile_image` | URL \| null | Profile image URL for the user who posted the reply |
 | `body` | string | Reply text |
 | `is_owner` | boolean | `true` if the authenticated user is the reply author |
 | `created_at` | datetime (ISO 8601) | When the reply was created |

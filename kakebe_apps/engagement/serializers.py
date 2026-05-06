@@ -465,11 +465,15 @@ class ListingCommentReplySerializer(serializers.ModelSerializer):
     """Lightweight serializer for nested replies."""
     user_id = serializers.UUIDField(source='user.id', read_only=True)
     user_name = serializers.CharField(source='user.name', read_only=True)
+    user_profile_image = serializers.URLField(source='user.profile_image', read_only=True)
     is_owner = serializers.SerializerMethodField()
 
     class Meta:
         model = ListingComment
-        fields = ['id', 'user_id', 'user_name', 'body', 'is_owner', 'created_at', 'updated_at']
+        fields = [
+            'id', 'user_id', 'user_name', 'user_profile_image',
+            'body', 'is_owner', 'created_at', 'updated_at',
+        ]
 
     def get_is_owner(self, obj):
         request = self.context.get('request')
@@ -479,16 +483,20 @@ class ListingCommentReplySerializer(serializers.ModelSerializer):
 class ListingCommentSerializer(serializers.ModelSerializer):
     user_id = serializers.UUIDField(source='user.id', read_only=True)
     user_name = serializers.CharField(source='user.name', read_only=True)
+    user_profile_image = serializers.URLField(source='user.profile_image', read_only=True)
     reply_count = serializers.SerializerMethodField()
     is_owner = serializers.SerializerMethodField()
 
     class Meta:
         model = ListingComment
         fields = [
-            'id', 'listing', 'parent', 'user_id', 'user_name',
+            'id', 'listing', 'parent', 'user_id', 'user_name', 'user_profile_image',
             'body', 'reply_count', 'is_owner', 'created_at', 'updated_at',
         ]
-        read_only_fields = ['id', 'listing', 'user_id', 'user_name', 'reply_count', 'is_owner', 'created_at', 'updated_at']
+        read_only_fields = [
+            'id', 'listing', 'user_id', 'user_name', 'user_profile_image',
+            'reply_count', 'is_owner', 'created_at', 'updated_at',
+        ]
 
     def get_reply_count(self, obj):
         return obj.replies.filter(is_deleted=False).count()
