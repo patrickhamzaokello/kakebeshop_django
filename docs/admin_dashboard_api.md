@@ -383,11 +383,17 @@ List all listings (any status) with optional search and filtering.
 | `q`           | string  | Search by title, description, or merchant name                   |
 | `status`      | string  | Filter by status (`ACTIVE`, `PENDING`, `REJECTED`, etc.)         |
 | `merchant_id` | uuid    | Filter by merchant ID                                            |
+| `merchant`    | uuid    | Alias for `merchant_id`                                          |
 | `category_id` | uuid    | Filter by category ID                                            |
+| `listing_type` | string | Filter by listing type (`PRODUCT`, `SERVICE`)                    |
 | `is_verified` | boolean | Filter by verification status (`true`/`false`)                   |
+| `is_featured` | boolean | Filter by featured status (`true`/`false`)                       |
+| `merchant_verified` | boolean | Filter by merchant verification status (`true`/`false`)   |
 | `quality_status` | string | Filter by quality status (`PENDING`, `APPROVED`, `REJECTED`, `NEEDS_REVIEW`) |
 | `is_home_feed_eligible` | boolean | Filter by home feed eligibility (`true`/`false`)        |
 | `is_home_feed_pinned` | boolean | Filter by pinned home feed status (`true`/`false`)       |
+| `has_feed_boost` | boolean | Filter listings with `feed_rank_boost > 0` (`true`) or no boost (`false`) |
+| `has_active_pin` | boolean | Filter listings with a non-expired home feed pin (`true`/`false`) |
 | `page`        | integer | Page number (default: `1`)                                       |
 | `page_size`   | integer | Items per page (default: `20`, max: `100`)                       |
 

@@ -352,7 +352,10 @@ class AdminListingViewSet(ViewSet):
         if listing_status:
             qs = qs.filter(status=listing_status)
 
-        merchant_id = request.query_params.get('merchant_id', '').strip()
+        merchant_id = (
+            request.query_params.get('merchant_id', '')
+            or request.query_params.get('merchant', '')
+        ).strip()
         if merchant_id:
             qs = qs.filter(merchant_id=merchant_id)
 
@@ -360,9 +363,21 @@ class AdminListingViewSet(ViewSet):
         if category_id:
             qs = qs.filter(category_id=category_id)
 
+        listing_type = request.query_params.get('listing_type', '').strip().upper()
+        if listing_type:
+            qs = qs.filter(listing_type=listing_type)
+
         is_verified = request.query_params.get('is_verified')
         if is_verified is not None:
             qs = qs.filter(is_verified=is_verified.lower() == 'true')
+
+        is_featured = request.query_params.get('is_featured')
+        if is_featured is not None:
+            qs = qs.filter(is_featured=is_featured.lower() == 'true')
+
+        merchant_verified = request.query_params.get('merchant_verified')
+        if merchant_verified is not None:
+            qs = qs.filter(merchant__verified=merchant_verified.lower() == 'true')
 
         quality_status = request.query_params.get('quality_status', '').strip().upper()
         if quality_status:
@@ -375,6 +390,18 @@ class AdminListingViewSet(ViewSet):
         is_home_feed_pinned = request.query_params.get('is_home_feed_pinned')
         if is_home_feed_pinned is not None:
             qs = qs.filter(is_home_feed_pinned=is_home_feed_pinned.lower() == 'true')
+
+        has_feed_boost = request.query_params.get('has_feed_boost')
+        if has_feed_boost is not None:
+            qs = qs.filter(feed_rank_boost__gt=0) if has_feed_boost.lower() == 'true' else qs.filter(feed_rank_boost=0)
+
+        has_active_pin = request.query_params.get('has_active_pin')
+        if has_active_pin is not None:
+            now = timezone.now()
+            active_pin_filter = Q(is_home_feed_pinned=True) & (
+                Q(home_feed_pin_until__isnull=True) | Q(home_feed_pin_until__gt=now)
+            )
+            qs = qs.filter(active_pin_filter) if has_active_pin.lower() == 'true' else qs.exclude(active_pin_filter)
 
         paginator = self.pagination_class()
         page = paginator.paginate_queryset(qs, request)

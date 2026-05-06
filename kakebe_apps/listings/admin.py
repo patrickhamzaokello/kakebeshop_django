@@ -21,9 +21,10 @@ class ListingAdmin(admin.ModelAdmin):
         'is_home_feed_pinned', 'price_display', 'views_count', 'created_at'
     ]
     list_filter = [
+        ('merchant', admin.RelatedOnlyFieldListFilter),
         'listing_type', 'status', 'is_verified', 'is_featured',
         'quality_status', 'is_home_feed_eligible', 'is_home_feed_pinned',
-        'category', 'created_at'
+        'merchant__verified', 'category', 'price_type', 'created_at'
     ]
     search_fields = [
         'title', 'description', 'merchant__display_name',
