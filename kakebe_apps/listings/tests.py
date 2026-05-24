@@ -812,3 +812,85 @@ class ListingServiceTestCase(TestCase):
 
         self.assertEqual(ranked_ids[:2], [pinned.id, boosted.id])
         self.assertNotIn(rejected.id, ranked_ids)
+
+    def test_home_feed_ranking_lifts_fresh_unseen_listings(self):
+        """Fresh listings should rank ahead of older listings when core controls tie."""
+        now = timezone.now()
+        old_listing = Listing.objects.create(
+            merchant=self.merchant,
+            title='Older Product',
+            description='Older description',
+            listing_type='PRODUCT',
+            category=self.category,
+            price_type='FIXED',
+            price=Decimal('100.00'),
+            status='ACTIVE',
+            is_verified=True,
+            is_home_feed_eligible=True,
+            quality_status='APPROVED',
+            quality_score=Decimal('80.00'),
+        )
+        fresh_listing = Listing.objects.create(
+            merchant=self.merchant,
+            title='Fresh Product',
+            description='Fresh description',
+            listing_type='PRODUCT',
+            category=self.category,
+            price_type='FIXED',
+            price=Decimal('100.00'),
+            status='ACTIVE',
+            is_verified=True,
+            is_home_feed_eligible=True,
+            quality_status='APPROVED',
+            quality_score=Decimal('80.00'),
+        )
+        Listing.objects.filter(pk=old_listing.pk).update(created_at=now - timezone.timedelta(days=20))
+        Listing.objects.filter(pk=fresh_listing.pk).update(created_at=now - timezone.timedelta(hours=2))
+
+        ranked_ids = list(
+            self.service.apply_home_feed_ranking(
+                Listing.objects.filter(id__in=[old_listing.id, fresh_listing.id])
+            ).values_list('id', flat=True)
+        )
+
+        self.assertEqual(ranked_ids[:2], [fresh_listing.id, old_listing.id])
+
+    def test_home_feed_ranking_demotes_recently_seen_listings(self):
+        """Clients can pass recently shown IDs so unseen listings rotate into the first screen."""
+        seen_listing = Listing.objects.create(
+            merchant=self.merchant,
+            title='Seen Product',
+            description='Seen description',
+            listing_type='PRODUCT',
+            category=self.category,
+            price_type='FIXED',
+            price=Decimal('100.00'),
+            status='ACTIVE',
+            is_verified=True,
+            is_home_feed_eligible=True,
+            quality_status='APPROVED',
+            quality_score=Decimal('90.00'),
+        )
+        unseen_listing = Listing.objects.create(
+            merchant=self.merchant,
+            title='Unseen Product',
+            description='Unseen description',
+            listing_type='PRODUCT',
+            category=self.category,
+            price_type='FIXED',
+            price=Decimal('100.00'),
+            status='ACTIVE',
+            is_verified=True,
+            is_home_feed_eligible=True,
+            quality_status='APPROVED',
+            quality_score=Decimal('90.00'),
+        )
+
+        ranked_ids = list(
+            self.service.apply_home_feed_ranking(
+                Listing.objects.filter(id__in=[seen_listing.id, unseen_listing.id]),
+                recently_seen_listing_ids=[seen_listing.id],
+            ).values_list('id', flat=True)
+        )
+
+        self.assertEqual(ranked_ids[:2], [unseen_listing.id, seen_listing.id])

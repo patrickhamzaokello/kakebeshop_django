@@ -12,6 +12,7 @@ from django.utils.decorators import method_decorator
 from django.views.decorators.cache import cache_page
 import csv
 import logging
+import uuid
 
 from .models import Listing, ListingBusinessHour, ListingDeliveryMode
 from .serializers import (
@@ -99,6 +100,27 @@ class ListingViewSet(viewsets.ViewSet):
     """
 
     pagination_class = ListingPagination
+
+    def _parse_seen_listing_ids(self, request):
+        """
+        Parse listing IDs the client already showed recently.
+        Supports repeated params and comma-separated values.
+        """
+        raw_values = []
+        raw_values.extend(request.query_params.getlist('seen_listing_ids'))
+        raw_values.extend(request.query_params.getlist('seen_listing_ids[]'))
+
+        parsed = []
+        for raw_value in raw_values:
+            for value in str(raw_value).split(','):
+                value = value.strip()
+                if not value:
+                    continue
+                try:
+                    parsed.append(uuid.UUID(value))
+                except (TypeError, ValueError):
+                    continue
+        return parsed[:100]
 
     def get_queryset(self):
         """
@@ -192,7 +214,10 @@ class ListingViewSet(viewsets.ViewSet):
                 quality_status='APPROVED',
             ).order_by(order_field)
         else:
-            queryset = ListingService.apply_home_feed_ranking(queryset)
+            queryset = ListingService.apply_home_feed_ranking(
+                queryset,
+                recently_seen_listing_ids=self._parse_seen_listing_ids(request),
+            )
 
         # Apply pagination
         paginator = self.pagination_class()

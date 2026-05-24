@@ -25,12 +25,29 @@ Default ranking:
 
 1. Active pinned listings first, ordered by `home_feed_pin_position`.
 2. Active `feed_rank_boost` from highest to lowest.
-3. `quality_score` from highest to lowest.
-4. Featured listings.
-5. Engagement score based on views and contacts.
-6. Newest listings.
+3. Listings already shown recently by the client are demoted when `seen_listing_ids` is supplied.
+4. Freshness score:
+   - created in the last 24 hours: `30`
+   - created in the last 3 days: `20`
+   - created in the last 7 days: `10`
+   - created in the last 14 days: `5`
+   - older: `0`
+5. `quality_score` from highest to lowest.
+6. Featured listings.
+7. Engagement score based on views and contacts.
+8. Newest listings.
 
 Expired boosts and pins are ignored automatically. They can remain stored for audit/history without affecting the feed.
+
+Feed freshness:
+
+- `GET /api/v1/listings/` accepts optional `seen_listing_ids`.
+- Send IDs from listings the user has already seen recently, preferably the first page from the previous app open or refresh.
+- The parameter can be repeated or comma-separated:
+  - `?seen_listing_ids=uuid1,uuid2,uuid3`
+  - `?seen_listing_ids[]=uuid1&seen_listing_ids[]=uuid2`
+- The API uses up to 100 valid IDs and ignores invalid values.
+- Pins still remain above everything. Boosted listings still rank above normal listings, but normal listings that were already seen are pushed below comparable unseen listings.
 
 If the frontend supplies `sort_by`, the endpoint still applies the quality gate, then uses the requested sort.
 

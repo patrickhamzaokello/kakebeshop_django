@@ -37,7 +37,7 @@ class ListingService:
         )
 
     @staticmethod
-    def apply_home_feed_ranking(queryset):
+    def apply_home_feed_ranking(queryset, recently_seen_listing_ids=None):
         """
         Apply the default home feed quality gate and ranking.
 
@@ -45,9 +45,11 @@ class ListingService:
         1. Only approved, home-feed eligible listings are shown.
         2. Active pins occupy the top slots by pin position.
         3. Active feed boosts lift eligible listings beneath pins.
-        4. Quality, featured status, engagement, and recency break ties.
+        4. Previously seen listings can be demoted for feed freshness.
+        5. Fresh listings are lifted before quality, featured status, and engagement break ties.
         """
         now = timezone.now()
+        recently_seen_listing_ids = recently_seen_listing_ids or []
         active_window = Q(feed_boost_until__isnull=True) | Q(feed_boost_until__gt=now)
         active_pin_window = Q(home_feed_pin_until__isnull=True) | Q(home_feed_pin_until__gt=now)
 
@@ -84,6 +86,19 @@ class ListingService:
                 default=Value(0),
                 output_field=IntegerField(),
             ),
+            recently_seen_penalty=Case(
+                When(id__in=recently_seen_listing_ids, then=Value(1)),
+                default=Value(0),
+                output_field=IntegerField(),
+            ),
+            freshness_score=Case(
+                When(created_at__gte=now - timezone.timedelta(hours=24), then=Value(30)),
+                When(created_at__gte=now - timezone.timedelta(days=3), then=Value(20)),
+                When(created_at__gte=now - timezone.timedelta(days=7), then=Value(10)),
+                When(created_at__gte=now - timezone.timedelta(days=14), then=Value(5)),
+                default=Value(0),
+                output_field=IntegerField(),
+            ),
             engagement_score=ExpressionWrapper(
                 F('views_count') + (F('contact_count') * Value(5)),
                 output_field=IntegerField(),
@@ -92,6 +107,8 @@ class ListingService:
             '-active_home_pin',
             'home_pin_order',
             '-active_feed_boost',
+            'recently_seen_penalty',
+            '-freshness_score',
             '-quality_score',
             '-is_featured',
             '-engagement_score',
