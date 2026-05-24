@@ -1,6 +1,6 @@
 # ===== serializers.py =====
 from rest_framework import serializers
-from .models import PromotionalBanner, BannerListing
+from .models import BannerImageImport, PromotionalBanner, BannerListing
 
 
 class BannerListingSerializer(serializers.ModelSerializer):
@@ -86,3 +86,68 @@ class BannerListingCreateSerializer(serializers.ModelSerializer):
     class Meta:
         model = BannerListing
         fields = ['listing', 'sort_order']
+
+
+class BannerImageImportSerializer(serializers.ModelSerializer):
+    banner_title = serializers.CharField(source='banner.title', read_only=True)
+    agent_name = serializers.CharField(source='uploaded_by_agent.name', read_only=True)
+    cdn_url = serializers.SerializerMethodField()
+
+    class Meta:
+        model = BannerImageImport
+        fields = [
+            'id', 'banner', 'banner_title', 'uploaded_by_agent', 'agent_name',
+            'source_path', 'target_field', 'status', 'image_asset', 'cdn_url',
+            'error_message', 'metadata', 'processed_at', 'created_at', 'updated_at',
+        ]
+        read_only_fields = fields
+
+    def get_cdn_url(self, obj):
+        return obj.image_asset.cdn_url() if obj.image_asset else None
+
+
+class BannerAgentUploadSerializer(serializers.Serializer):
+    image = serializers.ImageField()
+    metadata = serializers.JSONField(required=False)
+    banner_id = serializers.UUIDField(required=False)
+    target = serializers.ChoiceField(choices=['image', 'mobile_image'], required=False)
+    title = serializers.CharField(required=False, allow_blank=True)
+    description = serializers.CharField(required=False, allow_blank=True)
+    display_type = serializers.ChoiceField(
+        choices=[choice[0] for choice in PromotionalBanner.DISPLAY_TYPE_CHOICES],
+        required=False,
+    )
+    placement = serializers.ChoiceField(
+        choices=[choice[0] for choice in PromotionalBanner.PLACEMENT_CHOICES],
+        required=False,
+    )
+    platform = serializers.ChoiceField(
+        choices=[choice[0] for choice in PromotionalBanner.PLATFORM_CHOICES],
+        required=False,
+    )
+    link_type = serializers.ChoiceField(
+        choices=[choice[0] for choice in PromotionalBanner.LINK_TYPE_CHOICES],
+        required=False,
+    )
+    listing_id = serializers.UUIDField(required=False)
+    listing_ids = serializers.ListField(child=serializers.UUIDField(), required=False)
+    category_id = serializers.UUIDField(required=False)
+    merchant_id = serializers.UUIDField(required=False)
+    link_url = serializers.URLField(required=False, allow_blank=True)
+    cta_text = serializers.CharField(required=False, allow_blank=True, max_length=50)
+    start_date = serializers.DateTimeField(required=False)
+    end_date = serializers.DateTimeField(required=False)
+    sort_order = serializers.IntegerField(required=False)
+
+    def get_metadata(self):
+        metadata = dict(self.validated_data.get('metadata') or {})
+        for field, value in self.validated_data.items():
+            if field in ['image', 'metadata']:
+                continue
+            if field in ['start_date', 'end_date']:
+                metadata[field] = value.isoformat()
+            elif field == 'listing_ids':
+                metadata[field] = [str(item) for item in value]
+            else:
+                metadata[field] = str(value) if hasattr(value, 'hex') else value
+        return metadata

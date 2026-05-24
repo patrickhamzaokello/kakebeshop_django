@@ -71,3 +71,5 @@ Targeting options:
 - `link_type: "NONE"`
 
 New banners default to `is_verified=false`, so admins can review before the app shows them.
+
+Remote AI agents should use `POST /api/v1/banner-agent/upload/` with a banner-agent secret instead of writing directly to this folder. See `docs/banner_image_imports.md`.

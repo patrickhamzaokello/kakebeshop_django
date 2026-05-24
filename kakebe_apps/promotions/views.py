@@ -1,16 +1,21 @@
 from rest_framework import viewsets, status
 from rest_framework.decorators import action
+from rest_framework.parsers import FormParser, MultiPartParser
 from rest_framework.response import Response
-from rest_framework.permissions import IsAuthenticated, IsAdminUser
+from rest_framework.permissions import AllowAny, IsAuthenticated, IsAdminUser
+from rest_framework.views import APIView
 from django.utils import timezone
 from django.db.models import Q
-from .models import PromotionalBanner, BannerListing
+from .models import BannerAgentCredential, PromotionalBanner, BannerListing
 from .serializers import (
+    BannerAgentUploadSerializer,
+    BannerImageImportSerializer,
     PromotionalBannerSerializer,
     PromotionalBannerListSerializer,
     BannerListingSerializer,
     BannerListingCreateSerializer
 )
+from .services import save_remote_banner_upload
 
 
 class PromotionalBannerViewSet(viewsets.ModelViewSet):
@@ -165,3 +170,42 @@ class BannerListingViewSet(viewsets.ModelViewSet):
             queryset = queryset.filter(banner_id=banner_id)
 
         return queryset
+
+
+class BannerAgentUploadView(APIView):
+    """
+    Remote upload endpoint for AI/design agents.
+
+    Auth:
+    - Authorization: Bearer <agent_secret>
+    - or X-Banner-Agent-Secret: <agent_secret>
+    """
+    permission_classes = [AllowAny]
+    parser_classes = [MultiPartParser, FormParser]
+
+    def _get_secret(self, request):
+        auth_header = request.headers.get('Authorization', '')
+        if auth_header.lower().startswith('bearer '):
+            return auth_header.split(' ', 1)[1].strip()
+        return request.headers.get('X-Banner-Agent-Secret', '').strip()
+
+    def post(self, request):
+        credential = BannerAgentCredential.authenticate(self._get_secret(request))
+        if credential is None:
+            return Response({'detail': 'Invalid banner agent credential.'}, status=status.HTTP_401_UNAUTHORIZED)
+
+        serializer = BannerAgentUploadSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        import_job = save_remote_banner_upload(
+            uploaded_file=serializer.validated_data['image'],
+            metadata=serializer.get_metadata(),
+            agent_credential=credential,
+        )
+        return Response(
+            {
+                'success': True,
+                'message': 'Banner image queued for moderation and upload.',
+                'data': BannerImageImportSerializer(import_job).data,
+            },
+            status=status.HTTP_201_CREATED,
+        )

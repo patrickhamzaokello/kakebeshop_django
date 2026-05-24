@@ -1,6 +1,7 @@
 import json
 import mimetypes
 import shutil
+import re
 import uuid
 from pathlib import Path
 from urllib import request as urllib_request
@@ -41,6 +42,53 @@ def _safe_child_path(directory, filename):
     if directory not in path.parents and path != directory:
         raise ValueError('Invalid import path.')
     return path
+
+
+def _safe_filename(filename):
+    stem = Path(filename).stem
+    suffix = Path(filename).suffix.lower()
+    stem = re.sub(r'[^A-Za-z0-9._-]+', '-', stem).strip('-') or 'banner'
+    if suffix not in BANNER_IMPORT_EXTENSIONS:
+        raise ValueError('Unsupported banner image file type.')
+    return f"{uuid.uuid4()}__{stem}{suffix}"
+
+
+def save_remote_banner_upload(uploaded_file, metadata, agent_credential):
+    """
+    Store a remote AI agent upload in the same incoming folder used by the worker.
+    """
+    incoming_dir = get_banner_import_dir()
+    incoming_dir.mkdir(parents=True, exist_ok=True)
+
+    filename = _safe_filename(uploaded_file.name)
+    image_path = _safe_child_path(incoming_dir, filename)
+    sidecar_path = image_path.with_suffix('.json')
+
+    with image_path.open('wb') as handle:
+        for chunk in uploaded_file.chunks():
+            handle.write(chunk)
+
+    metadata = metadata or {}
+    with sidecar_path.open('w', encoding='utf-8') as handle:
+        json.dump(metadata, handle, indent=2)
+
+    target_field = metadata.get('target_field') or metadata.get('target') or _guess_target_from_filename(image_path)
+    if target_field not in ['image', 'mobile_image']:
+        target_field = 'image'
+
+    banner = None
+    banner_id = metadata.get('banner_id')
+    if banner_id:
+        banner = PromotionalBanner.objects.filter(pk=banner_id).first()
+
+    return BannerImageImport.objects.create(
+        banner=banner,
+        uploaded_by_agent=agent_credential,
+        source_path=str(image_path),
+        sidecar_path=str(sidecar_path),
+        target_field=target_field,
+        metadata=metadata,
+    )
 
 
 def _load_sidecar(image_path):

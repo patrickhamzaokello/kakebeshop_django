@@ -78,3 +78,89 @@ Supported targets:
 - `NONE`
 
 New sidecar-created banners default to `is_verified=false`, so admins can review them before they appear in the app.
+
+## Remote AI Agent Uploads
+
+AI agents can upload remotely without filesystem access:
+
+```http
+POST /api/v1/banner-agent/upload/
+Authorization: Bearer <banner-agent-secret>
+Content-Type: multipart/form-data
+```
+
+Multipart fields:
+
+| Field | Required | Description |
+|---|---|---|
+| `image` | yes | Banner image file (`jpg`, `jpeg`, `png`, `webp`) |
+| `metadata` | no | JSON object using the sidecar format above |
+| `target` | no | `image` or `mobile_image` |
+| `banner_id` | no | Existing banner to update |
+| `title` | no | New/updated banner title |
+| `placement` | no | Banner placement such as `HOME_TOP` |
+| `link_type` | no | `LISTING`, `LISTINGS`, `CATEGORY`, `MERCHANT`, `URL`, or `NONE` |
+| `listing_id` / `listing_ids` | no | Listing target(s) |
+| `category_id` | no | Category target |
+| `merchant_id` | no | Merchant target |
+| `link_url` | no | External URL target |
+
+Response:
+
+```json
+{
+  "success": true,
+  "message": "Banner image queued for moderation and upload.",
+  "data": {
+    "id": "queue-id",
+    "status": "PENDING",
+    "target_field": "image"
+  }
+}
+```
+
+Uploaded files are queued first. The background job still uploads to S3 and creates or updates the banner.
+
+## Moderation and Preview
+
+AI-created banners are not live by default:
+
+- New banners are created with `is_verified=false`.
+- Public banner endpoints only return active, verified, in-date banners that have an image URL.
+- Admins can preview banners from Django admin before verification.
+- Admins can review upload queue records in `Banner image imports`.
+- Failed imports keep `error_message` and are visible in admin.
+
+## Agent Credentials
+
+Credentials are managed in Django admin under `Banner agent credentials`.
+
+- Create a credential to generate a secret.
+- Reset selected credentials from the admin action menu.
+- The raw secret is shown only once when created or reset.
+- The database stores only a token prefix and SHA-256 hash.
+- Deactivate a credential to immediately block uploads.
+
+Agents can send the secret either as:
+
+```http
+Authorization: Bearer <secret>
+```
+
+or:
+
+```http
+X-Banner-Agent-Secret: <secret>
+```
+
+Bootstrap/reset from the server shell:
+
+```bash
+python manage.py reset_banner_agent_credential --name default-ai-banner-agent
+```
+
+To set a known secret during deployment:
+
+```bash
+python manage.py reset_banner_agent_credential --name default-ai-banner-agent --secret "kbai_replace_with_secret"
+```

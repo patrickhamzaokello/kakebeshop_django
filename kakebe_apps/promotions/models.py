@@ -1,4 +1,6 @@
 import uuid
+import hashlib
+import secrets
 from django.db import models
 from django.core.exceptions import ValidationError
 from django.utils import timezone
@@ -6,6 +8,61 @@ from django.utils import timezone
 from kakebe_apps.categories.models import Category
 from kakebe_apps.imagehandler.models import ImageAsset
 from kakebe_apps.merchants.models import Merchant
+
+
+class BannerAgentCredential(models.Model):
+    """
+    Dedicated shared-secret credentials for remote AI/design agents.
+    Secrets are stored hashed and can only be viewed when generated/reset.
+    """
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    name = models.CharField(max_length=120, unique=True)
+    token_prefix = models.CharField(max_length=12, blank=True, db_index=True)
+    token_hash = models.CharField(max_length=128, blank=True)
+    is_active = models.BooleanField(default=True, db_index=True)
+    last_used_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = 'banner_agent_credentials'
+        ordering = ['name']
+
+    def __str__(self):
+        return self.name
+
+    @staticmethod
+    def generate_secret():
+        return f"kbai_{secrets.token_urlsafe(40)}"
+
+    @staticmethod
+    def hash_secret(secret):
+        return hashlib.sha256(secret.encode('utf-8')).hexdigest()
+
+    def set_secret(self, secret):
+        self.token_prefix = secret[:12]
+        self.token_hash = self.hash_secret(secret)
+
+    def issue_secret(self):
+        secret = self.generate_secret()
+        self.set_secret(secret)
+        return secret
+
+    def verify_secret(self, secret):
+        return bool(secret and self.token_hash == self.hash_secret(secret))
+
+    @classmethod
+    def authenticate(cls, secret):
+        if not secret:
+            return None
+        prefix = secret[:12]
+        candidates = cls.objects.filter(is_active=True, token_prefix=prefix)
+        for credential in candidates:
+            if credential.verify_secret(secret):
+                credential.last_used_at = timezone.now()
+                credential.save(update_fields=['last_used_at', 'updated_at'])
+                return credential
+        return None
 
 
 class PromotionalBanner(models.Model):
@@ -198,6 +255,13 @@ class BannerImageImport(models.Model):
         null=True,
         blank=True,
         related_name='image_imports'
+    )
+    uploaded_by_agent = models.ForeignKey(
+        BannerAgentCredential,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='banner_imports'
     )
     source_path = models.CharField(max_length=500, unique=True)
     sidecar_path = models.CharField(max_length=500, blank=True)

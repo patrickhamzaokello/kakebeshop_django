@@ -1,7 +1,7 @@
 from django.contrib import admin
 from django.utils.html import format_html
 from django.utils import timezone
-from .models import BannerImageImport, PromotionalBanner, BannerListing
+from .models import BannerAgentCredential, BannerImageImport, PromotionalBanner, BannerListing
 
 
 class BannerListingInline(admin.TabularInline):
@@ -15,7 +15,7 @@ class BannerListingInline(admin.TabularInline):
 class PromotionalBannerAdmin(admin.ModelAdmin):
     list_display = [
         'title', 'display_type', 'placement', 'status_badge',
-        'active_period', 'stats', 'sort_order', 'created_at'
+        'image_preview', 'active_period', 'stats', 'sort_order', 'created_at'
     ]
     list_filter = [
         'display_type', 'placement', 'platform', 'is_verified',
@@ -24,7 +24,7 @@ class PromotionalBannerAdmin(admin.ModelAdmin):
     search_fields = ['title', 'description', 'cta_text']
     readonly_fields = [
         'id', 'impressions', 'clicks', 'ctr_display',
-        'verified_at', 'created_at', 'updated_at', 'status_indicator'
+        'verified_at', 'created_at', 'updated_at', 'status_indicator', 'image_preview'
     ]
     autocomplete_fields = ['link_category', 'link_merchant']
     inlines = [BannerListingInline]
@@ -34,7 +34,7 @@ class PromotionalBannerAdmin(admin.ModelAdmin):
             'fields': ('title', 'description', 'display_type', 'placement', 'platform')
         }),
         ('Media', {
-            'fields': ('image', 'mobile_image', 'image_asset', 'mobile_image_asset')
+            'fields': ('image_preview', 'image', 'mobile_image', 'image_asset', 'mobile_image_asset')
         }),
         ('Link Configuration', {
             'fields': ('link_type', 'link_url', 'link_category', 'link_merchant', 'cta_text')
@@ -101,6 +101,16 @@ class PromotionalBannerAdmin(admin.ModelAdmin):
 
     ctr_display.short_description = 'Click-Through Rate'
 
+    def image_preview(self, obj):
+        if not obj or not obj.image:
+            return 'No image'
+        return format_html(
+            '<img src="{}" style="max-width: 360px; max-height: 120px; object-fit: contain;" />',
+            obj.image,
+        )
+
+    image_preview.short_description = 'Preview'
+
     def verify_banners(self, request, queryset):
         updated = queryset.update(is_verified=True, verified_at=timezone.now())
         self.message_user(request, f'{updated} banner(s) verified successfully.')
@@ -137,8 +147,65 @@ class BannerListingAdmin(admin.ModelAdmin):
 
 @admin.register(BannerImageImport)
 class BannerImageImportAdmin(admin.ModelAdmin):
-    list_display = ['source_path', 'banner', 'target_field', 'status', 'processed_at', 'created_at']
+    list_display = ['source_path', 'banner', 'uploaded_by_agent', 'target_field', 'status', 'import_preview', 'processed_at', 'created_at']
     list_filter = ['status', 'target_field', 'created_at', 'processed_at']
     search_fields = ['source_path', 'banner__title', 'error_message']
-    autocomplete_fields = ['banner', 'image_asset']
-    readonly_fields = ['id', 'error_message', 'metadata', 'processed_at', 'created_at', 'updated_at']
+    autocomplete_fields = ['banner', 'image_asset', 'uploaded_by_agent']
+    readonly_fields = [
+        'id', 'error_message', 'metadata', 'import_preview',
+        'processed_at', 'created_at', 'updated_at'
+    ]
+
+    def import_preview(self, obj):
+        if obj.image_asset:
+            return format_html(
+                '<img src="{}" style="max-width: 360px; max-height: 120px; object-fit: contain;" />',
+                obj.image_asset.cdn_url(),
+            )
+        return 'Preview available after upload processing'
+
+    import_preview.short_description = 'Preview'
+
+
+@admin.register(BannerAgentCredential)
+class BannerAgentCredentialAdmin(admin.ModelAdmin):
+    list_display = ['name', 'token_prefix', 'is_active', 'last_used_at', 'created_at']
+    list_filter = ['is_active', 'created_at', 'last_used_at']
+    search_fields = ['name', 'token_prefix']
+    readonly_fields = ['id', 'token_prefix', 'last_used_at', 'created_at', 'updated_at']
+    fields = ['name', 'is_active', 'token_prefix', 'last_used_at', 'id', 'created_at', 'updated_at']
+    actions = ['reset_credentials', 'activate_credentials', 'deactivate_credentials']
+
+    def save_model(self, request, obj, form, change):
+        if not change and not obj.token_hash:
+            secret = obj.issue_secret()
+            super().save_model(request, obj, form, change)
+            self.message_user(
+                request,
+                f'Banner agent secret for {obj.name}: {secret}. Store it now; it will not be shown again.',
+            )
+            return
+        super().save_model(request, obj, form, change)
+
+    def reset_credentials(self, request, queryset):
+        for credential in queryset:
+            secret = credential.issue_secret()
+            credential.save(update_fields=['token_prefix', 'token_hash', 'updated_at'])
+            self.message_user(
+                request,
+                f'New banner agent secret for {credential.name}: {secret}. Store it now; it will not be shown again.',
+            )
+
+    reset_credentials.short_description = 'Reset selected agent credentials'
+
+    def activate_credentials(self, request, queryset):
+        updated = queryset.update(is_active=True)
+        self.message_user(request, f'{updated} credential(s) activated.')
+
+    activate_credentials.short_description = 'Activate selected credentials'
+
+    def deactivate_credentials(self, request, queryset):
+        updated = queryset.update(is_active=False)
+        self.message_user(request, f'{updated} credential(s) deactivated.')
+
+    deactivate_credentials.short_description = 'Deactivate selected credentials'
