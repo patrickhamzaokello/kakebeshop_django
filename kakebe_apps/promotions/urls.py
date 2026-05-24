@@ -3,7 +3,12 @@
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter
 
-from .views import BannerAgentUploadView, PromotionalBannerViewSet, BannerListingViewSet
+from .views import (
+    BannerAgentImportStatusView,
+    BannerAgentUploadView,
+    PromotionalBannerViewSet,
+    BannerListingViewSet,
+)
 
 router = DefaultRouter()
 router.register(r'banners', PromotionalBannerViewSet, basename='promotional-banner')
@@ -11,5 +16,6 @@ router.register(r'banner-listings', BannerListingViewSet, basename='banner-listi
 
 urlpatterns = [
     path('banner-agent/upload/', BannerAgentUploadView.as_view(), name='banner-agent-upload'),
+    path('banner-agent/imports/<uuid:import_id>/', BannerAgentImportStatusView.as_view(), name='banner-agent-import-status'),
     path('', include(router.urls)),
 ]

@@ -6,7 +6,7 @@ from rest_framework.permissions import AllowAny, IsAuthenticated, IsAdminUser
 from rest_framework.views import APIView
 from django.utils import timezone
 from django.db.models import Q
-from .models import BannerAgentCredential, PromotionalBanner, BannerListing
+from .models import BannerAgentCredential, BannerImageImport, PromotionalBanner, BannerListing
 from .serializers import (
     BannerAgentUploadSerializer,
     BannerImageImportSerializer,
@@ -181,16 +181,18 @@ class BannerAgentUploadView(APIView):
     - or X-Banner-Agent-Secret: <agent_secret>
     """
     permission_classes = [AllowAny]
+    authentication_classes = []
     parser_classes = [MultiPartParser, FormParser]
 
-    def _get_secret(self, request):
+    @staticmethod
+    def get_secret(request):
         auth_header = request.headers.get('Authorization', '')
         if auth_header.lower().startswith('bearer '):
             return auth_header.split(' ', 1)[1].strip()
         return request.headers.get('X-Banner-Agent-Secret', '').strip()
 
     def post(self, request):
-        credential = BannerAgentCredential.authenticate(self._get_secret(request))
+        credential = BannerAgentCredential.authenticate(self.get_secret(request))
         if credential is None:
             return Response({'detail': 'Invalid banner agent credential.'}, status=status.HTTP_401_UNAUTHORIZED)
 
@@ -209,3 +211,23 @@ class BannerAgentUploadView(APIView):
             },
             status=status.HTTP_201_CREATED,
         )
+
+
+class BannerAgentImportStatusView(APIView):
+    """Allow an AI agent to check processing status for its own upload."""
+    permission_classes = [AllowAny]
+    authentication_classes = []
+
+    def get(self, request, import_id):
+        credential = BannerAgentCredential.authenticate(BannerAgentUploadView.get_secret(request))
+        if credential is None:
+            return Response({'detail': 'Invalid banner agent credential.'}, status=status.HTTP_401_UNAUTHORIZED)
+
+        try:
+            import_job = BannerImageImport.objects.select_related(
+                'banner', 'uploaded_by_agent', 'image_asset'
+            ).get(pk=import_id, uploaded_by_agent=credential)
+        except BannerImageImport.DoesNotExist:
+            return Response({'detail': 'Banner import not found.'}, status=status.HTTP_404_NOT_FOUND)
+
+        return Response({'success': True, 'data': BannerImageImportSerializer(import_job).data})

@@ -69,6 +69,7 @@ def save_remote_banner_upload(uploaded_file, metadata, agent_credential):
             handle.write(chunk)
 
     metadata = metadata or {}
+    metadata['is_verified'] = False
     with sidecar_path.open('w', encoding='utf-8') as handle:
         json.dump(metadata, handle, indent=2)
 
@@ -339,5 +340,4 @@ def process_banner_image_import(import_id):
         import_job.status = 'FAILED'
         import_job.error_message = str(exc)
         import_job.save(update_fields=['status', 'error_message', 'updated_at'])
-        _move_import_files(import_job, get_banner_failed_dir())
         return {'status': 'FAILED', 'error': str(exc)}

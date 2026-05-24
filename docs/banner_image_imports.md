@@ -121,6 +121,17 @@ Response:
 
 Uploaded files are queued first. The background job still uploads to S3 and creates or updates the banner.
 
+Remote uploads always force `is_verified=false`, even if the agent includes `is_verified` in metadata. Admin approval is required before the app can show the banner publicly.
+
+Check processing status:
+
+```http
+GET /api/v1/banner-agent/imports/{import_id}/
+Authorization: Bearer <banner-agent-secret>
+```
+
+The response includes `status`, `banner`, `cdn_url`, and `error_message`.
+
 ## Moderation and Preview
 
 AI-created banners are not live by default:

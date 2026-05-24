@@ -2,6 +2,7 @@ from django.contrib import admin
 from django.utils.html import format_html
 from django.utils import timezone
 from .models import BannerAgentCredential, BannerImageImport, PromotionalBanner, BannerListing
+from .tasks import process_pending_banner_image_imports
 
 
 class BannerListingInline(admin.TabularInline):
@@ -155,6 +156,7 @@ class BannerImageImportAdmin(admin.ModelAdmin):
         'id', 'error_message', 'metadata', 'import_preview',
         'processed_at', 'created_at', 'updated_at'
     ]
+    actions = ['retry_imports']
 
     def import_preview(self, obj):
         if obj.image_asset:
@@ -165,6 +167,13 @@ class BannerImageImportAdmin(admin.ModelAdmin):
         return 'Preview available after upload processing'
 
     import_preview.short_description = 'Preview'
+
+    def retry_imports(self, request, queryset):
+        updated = queryset.filter(status='FAILED').update(status='PENDING', error_message='')
+        process_pending_banner_image_imports.delay()
+        self.message_user(request, f'{updated} failed import(s) queued for retry.')
+
+    retry_imports.short_description = 'Retry failed banner imports'
 
 
 @admin.register(BannerAgentCredential)
