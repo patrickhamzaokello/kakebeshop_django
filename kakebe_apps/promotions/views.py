@@ -28,7 +28,9 @@ class PromotionalBannerViewSet(viewsets.ModelViewSet):
         return [IsAdminUser()]
 
     def get_queryset(self):
-        queryset = PromotionalBanner.objects.select_related('link_category')
+        queryset = PromotionalBanner.objects.select_related(
+            'link_category', 'link_merchant', 'image_asset', 'mobile_image_asset'
+        )
 
         # Filter by placement
         placement = self.request.query_params.get('placement')
@@ -53,7 +55,7 @@ class PromotionalBannerViewSet(viewsets.ModelViewSet):
                 is_verified=True,
                 start_date__lte=now,
                 end_date__gte=now
-            )
+            ).exclude(image='')
 
         return queryset.prefetch_related('featured_listings__listing')
 

@@ -7,6 +7,12 @@ IMAGE_RULES = {
         },
         "min_images": 3,
     },
+    "banner": {
+        "variants": {
+            "large": {"max_size": 2_500_000},
+            "mobile": {"max_size": 1_500_000},
+        }
+    },
     "profile": {
         "variants": {
             "thumb": {"max_size": 500_000},

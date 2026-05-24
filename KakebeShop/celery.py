@@ -33,6 +33,12 @@ app.conf.beat_schedule = {
         'task': 'kakebe_apps.notifications.tasks.cleanup_old_notifications',
         'schedule': crontab(hour=2, minute=0),
     },
+
+    # Import AI/designer-generated banner images every 2 minutes
+    'process-banner-image-imports': {
+        'task': 'kakebe_apps.promotions.tasks.process_pending_banner_image_imports',
+        'schedule': 120.0,
+    },
 }
 
 # Celery configuration

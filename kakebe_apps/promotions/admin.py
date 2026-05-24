@@ -1,7 +1,7 @@
 from django.contrib import admin
 from django.utils.html import format_html
 from django.utils import timezone
-from .models import PromotionalBanner, BannerListing
+from .models import BannerImageImport, PromotionalBanner, BannerListing
 
 
 class BannerListingInline(admin.TabularInline):
@@ -26,7 +26,7 @@ class PromotionalBannerAdmin(admin.ModelAdmin):
         'id', 'impressions', 'clicks', 'ctr_display',
         'verified_at', 'created_at', 'updated_at', 'status_indicator'
     ]
-    autocomplete_fields = ['link_category']
+    autocomplete_fields = ['link_category', 'link_merchant']
     inlines = [BannerListingInline]
 
     fieldsets = (
@@ -34,10 +34,10 @@ class PromotionalBannerAdmin(admin.ModelAdmin):
             'fields': ('title', 'description', 'display_type', 'placement', 'platform')
         }),
         ('Media', {
-            'fields': ('image', 'mobile_image')
+            'fields': ('image', 'mobile_image', 'image_asset', 'mobile_image_asset')
         }),
         ('Link Configuration', {
-            'fields': ('link_type', 'link_url', 'link_category', 'cta_text')
+            'fields': ('link_type', 'link_url', 'link_category', 'link_merchant', 'cta_text')
         }),
         ('Scheduling', {
             'fields': ('start_date', 'end_date', 'sort_order')
@@ -133,3 +133,12 @@ class BannerListingAdmin(admin.ModelAdmin):
     search_fields = ['banner__title', 'listing__title']
     autocomplete_fields = ['banner', 'listing']
     ordering = ['banner', 'sort_order']
+
+
+@admin.register(BannerImageImport)
+class BannerImageImportAdmin(admin.ModelAdmin):
+    list_display = ['source_path', 'banner', 'target_field', 'status', 'processed_at', 'created_at']
+    list_filter = ['status', 'target_field', 'created_at', 'processed_at']
+    search_fields = ['source_path', 'banner__title', 'error_message']
+    autocomplete_fields = ['banner', 'image_asset']
+    readonly_fields = ['id', 'error_message', 'metadata', 'processed_at', 'created_at', 'updated_at']

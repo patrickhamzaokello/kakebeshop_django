@@ -4,7 +4,7 @@ from .models import ImageAsset
 
 class PresignUploadSerializer(serializers.Serializer):
     image_type = serializers.ChoiceField(
-        choices=["listing", "profile", "store_banner", "store_cover"]
+        choices=["listing", "banner", "profile", "store_banner", "store_cover"]
     )
     image_group_id = serializers.UUIDField()  # NEW: Groups variants together
     variant = serializers.CharField()
@@ -29,7 +29,7 @@ class AttachImagesToObjectSerializer(serializers.Serializer):
     )
     object_id = serializers.UUIDField()
     image_type = serializers.ChoiceField(
-        choices=["listing", "profile", "store_banner", "store_cover"]
+        choices=["listing", "banner", "profile", "store_banner", "store_cover"]
     )
 
 

@@ -70,6 +70,10 @@ LISTING_CONTACT_INCREMENT_COOLDOWN = 3600  # 1 hour
 # Image settings
 LISTING_MAX_IMAGES = 10
 LISTING_IMAGE_VARIANTS = ['thumb', 'medium', 'large', 'original']
+BANNER_IMPORT_INCOMING_DIR = BASE_DIR / 'banner_imports' / 'incoming'
+BANNER_IMPORT_PROCESSED_DIR = BASE_DIR / 'banner_imports' / 'processed'
+BANNER_IMPORT_FAILED_DIR = BASE_DIR / 'banner_imports' / 'failed'
+BANNER_IMPORT_OWNER_EMAIL = config('BANNER_IMPORT_OWNER_EMAIL', default='')
 
 # Listing expiry (optional)
 LISTING_DEFAULT_EXPIRY_DAYS = 30

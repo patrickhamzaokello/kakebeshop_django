@@ -4,6 +4,8 @@ from django.core.exceptions import ValidationError
 from django.utils import timezone
 
 from kakebe_apps.categories.models import Category
+from kakebe_apps.imagehandler.models import ImageAsset
+from kakebe_apps.merchants.models import Merchant
 
 
 class PromotionalBanner(models.Model):
@@ -27,6 +29,7 @@ class PromotionalBanner(models.Model):
         ('LISTING', 'Single Listing'),
         ('LISTINGS', 'Multiple Listings'),
         ('CATEGORY', 'Category'),
+        ('MERCHANT', 'Merchant'),
         ('URL', 'External URL'),
         ('NONE', 'No Link'),
     ]
@@ -50,14 +53,35 @@ class PromotionalBanner(models.Model):
     platform = models.CharField(max_length=20, choices=PLATFORM_CHOICES, default='ALL')
 
     # Media
-    image = models.URLField(help_text="Main banner image URL")
+    image = models.URLField(blank=True, help_text="Main banner image URL")
     mobile_image = models.URLField(blank=True, help_text="Optional mobile-specific image")
+    image_asset = models.ForeignKey(
+        ImageAsset,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='primary_promotional_banners'
+    )
+    mobile_image_asset = models.ForeignKey(
+        ImageAsset,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='mobile_promotional_banners'
+    )
 
     # Link Configuration
     link_type = models.CharField(max_length=20, choices=LINK_TYPE_CHOICES, default='NONE')
     link_url = models.URLField(blank=True, help_text="For external URLs")
     link_category = models.ForeignKey(
         Category,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='promotional_banners'
+    )
+    link_merchant = models.ForeignKey(
+        Merchant,
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
@@ -108,6 +132,9 @@ class PromotionalBanner(models.Model):
         if self.link_type == 'CATEGORY' and not self.link_category:
             raise ValidationError("Category is required when link type is Category")
 
+        if self.link_type == 'MERCHANT' and not self.link_merchant:
+            raise ValidationError("Merchant is required when link type is Merchant")
+
         # Validate dates
         if self.start_date and self.end_date and self.end_date <= self.start_date:
             raise ValidationError("End date must be after start date")
@@ -128,6 +155,77 @@ class PromotionalBanner(models.Model):
         if self.impressions == 0:
             return 0
         return (self.clicks / self.impressions) * 100
+
+    def get_target_payload(self):
+        """Return a normalized navigation target for app clients."""
+        payload = {'type': self.link_type}
+        if self.link_type == 'URL':
+            payload['url'] = self.link_url
+        elif self.link_type == 'CATEGORY' and self.link_category_id:
+            payload['category_id'] = str(self.link_category_id)
+        elif self.link_type == 'MERCHANT' and self.link_merchant_id:
+            payload['merchant_id'] = str(self.link_merchant_id)
+        elif self.link_type in ['LISTING', 'LISTINGS']:
+            listing_ids = list(
+                self.featured_listings.order_by('sort_order').values_list('listing_id', flat=True)
+            )
+            payload['listing_ids'] = [str(listing_id) for listing_id in listing_ids]
+            if self.link_type == 'LISTING' and listing_ids:
+                payload['listing_id'] = str(listing_ids[0])
+        return payload
+
+
+class BannerImageImport(models.Model):
+    """
+    Queue item for AI/designer-generated banner files dropped into the import folder.
+    """
+    STATUS_CHOICES = [
+        ('PENDING', 'Pending'),
+        ('PROCESSING', 'Processing'),
+        ('UPLOADED', 'Uploaded'),
+        ('FAILED', 'Failed'),
+    ]
+
+    TARGET_CHOICES = [
+        ('image', 'Primary Image'),
+        ('mobile_image', 'Mobile Image'),
+    ]
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    banner = models.ForeignKey(
+        PromotionalBanner,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='image_imports'
+    )
+    source_path = models.CharField(max_length=500, unique=True)
+    sidecar_path = models.CharField(max_length=500, blank=True)
+    target_field = models.CharField(max_length=20, choices=TARGET_CHOICES, default='image')
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='PENDING', db_index=True)
+    image_asset = models.ForeignKey(
+        ImageAsset,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='banner_imports'
+    )
+    error_message = models.TextField(blank=True)
+    metadata = models.JSONField(default=dict, blank=True)
+    processed_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = 'banner_image_imports'
+        ordering = ['created_at']
+        indexes = [
+            models.Index(fields=['status', 'created_at']),
+            models.Index(fields=['banner', 'target_field']),
+        ]
+
+    def __str__(self):
+        return f"{self.source_path} [{self.status}]"
 
 
 class BannerListing(models.Model):

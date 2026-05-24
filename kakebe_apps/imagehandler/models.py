@@ -6,6 +6,7 @@ from django.db import models
 class ImageAsset(models.Model):
     IMAGE_TYPES = (
         ("listing", "Listing"),
+        ("banner", "Promotional Banner"),
         ("profile", "Profile"),
         ("store_banner", "Store Banner"),
         ("store_cover", "Store Cover"),
@@ -15,6 +16,7 @@ class ImageAsset(models.Model):
         ("thumb", "Thumbnail"),
         ("medium", "Medium"),
         ("large", "Large"),
+        ("mobile", "Mobile"),
     )
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
